@@ -20,24 +20,19 @@ lit = ${ "true" | "false" | (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)?)}
 
 uop = {("!" ~ exp) | ("-" ~ exp)}
 
-logic_ops = { (exp ~ "==" ~ exp )
-          | (exp ~ "<" ~ exp)
-          | (exp ~ ">" ~ exp)
-          | (exp ~ "&&" ~ exp)
-          | (exp ~ "||" ~ exp) } 
+infix = {"==" | "<" | ">" | "&&" | "||" | "*" | "/" | "+" | "-" }
 
-arith_ops = { (exp ~ "*" ~ exp)
-      | (exp ~ "/" ~ exp)
-      | (exp ~ "+" ~ exp)
-      | (exp ~ "-" ~ exp)}
-
-binop = { arith_ops
-      | logic_ops
-      | (varid ~ "=" ~ exp)
-      | ("[" ~ type_ ~ "]" ~ exp) }
+// terminals
+// literal
+// varid
+// nonterminals
+// exps at the bottom
+// binop
 
 exp = {("(" ~ exp ~ ")")
-      | binop
+      | (exp ~ infix ~ exp)
+      | (varid ~ "=" ~ exp)
+      | ("[" ~ type_ ~ "]" ~ exp)
       | uop
       | lit
       | varid
