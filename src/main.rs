@@ -1,5 +1,5 @@
 extern crate clap;
-use clap::{Arg, App};
+use clap::{App, Arg};
 
 fn main() {
     // TODO: add '?' flag for help- right now only -h works.
