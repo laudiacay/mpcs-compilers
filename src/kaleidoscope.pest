@@ -29,14 +29,35 @@ infix = {"==" | "<" | ">" | "&&" | "||" | "*" | "/" | "+" | "-" }
 // exps at the bottom
 // binop
 
-exp = {("(" ~ exp ~ ")")
-      | (exp ~ infix ~ exp)
+exp = { (assignment_exp ~ "=")* ~ assignment_exp  }
+assignment_exp = { or_exp ~ ("||" ~ or_exp)*  }
+or_exp = { and_exp ~ ("&&" ~ and_exp)*  }
+and_exp = { equality_exp ~ ("==" ~ equality_exp)*  }
+equality_exp = { comp_exp ~ (("<" | ">") ~ comp_exp)*  }
+comp_exp = { sum_exp ~ (("+" | "-") ~ sum_exp)*  }
+sum_exp = { prod_exp ~ (("*" | "/") ~ prod_exp)*  }
+prod_exp = { unary_exp  }
+unary_exp = { ("-" ~ unary_exp) | ("!" ~ unary_exp) | primary_exp  }
+
+
+primary_exp = {("(" ~ exp ~ ")")
       | (varid ~ "=" ~ exp)
       | ("[" ~ type_ ~ "]" ~ exp)
       | uop
       | lit
       | varid
       | (globid ~ "(" ~ exps? ~ ")")}
+
+/*
+exp = {("(" ~ exp ~ ")")
+      | infix_exp // (exp ~ infix ~ exp)
+      | (varid ~ "=" ~ exp)
+      | ("[" ~ type_ ~ "]" ~ exp)
+      | uop
+      | lit
+      | varid
+      | (globid ~ "(" ~ exps? ~ ")")}
+*/
 
 exps = { exp | (exp ~ "," ~ exps)}
 
