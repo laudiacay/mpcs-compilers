@@ -1,8 +1,17 @@
 extern crate clap;
+extern crate pest;
+#[macro_use]
+extern crate pest_derive;
+
 use clap::{App, Arg};
+use pest::Parser;
+use std::fs;
+
+#[derive(Parser)]
+#[grammar = "kaleidoscope.pest"]
+pub struct KaleidoscopeParser;
 
 fn main() {
-    // TODO: add '?' flag for help- right now only -h works.
     let matches = App::new("ekcc")
         .version("1.0")
         .author("Julian Beckman & Claudia Richoux")
@@ -17,5 +26,16 @@ fn main() {
         ])
         .get_matches();
 
-    println!("ok, here's what it got: {:?}", matches);
+    let unparsed_file =
+        fs::read_to_string(matches.value_of("input_file").unwrap()).expect("can't read input file");
+    let ast_maybe = KaleidoscopeParser::parse(Rule::prog, &unparsed_file)
+        .expect("unsuccessful parse") // unwrap the parse result
+        .next()
+        .unwrap(); // get and unwrap the `file` rule; never fails
+    println!("ast, i hope: {}", ast_maybe);
+
+    // TODO handle output file
+    // TODO handle optimizations
+    // TODO handle verbose
+    // TODO handle emit-ast vs llvm switch
 }

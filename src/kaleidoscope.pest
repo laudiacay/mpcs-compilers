@@ -1,0 +1,64 @@
+WHITESPACE = _{ " " | "\t" | NEWLINE}
+COMMENT = _{("#" ~ (!NEWLINE ~ ANY)*)}
+
+type_ = { "int" | "cint" | "float" | "bool" | "void" | ("noalias"? ~ "ref" ~ type_) }
+
+ident = @{(ASCII_ALPHA+) ~ ASCII_ALPHANUMERIC*}
+varid = @{"$" ~ ident} 
+globid = {ident}
+
+vdecl = {type_ ~ varid}
+
+vdecls = { vdecl | (vdecl ~ "," ~ vdecls)}
+tdecls = { type_ | (type_ ~ "," ~ tdecls)}
+
+extern_ = {"extern" ~ type_ ~ globid ~ "(" ~ tdecls? ~ ")" ~ ";"}
+
+slit = ${"\"" ~ (!("\"" | "\n" | "\r") ~ ANY)* ~ "\""}
+
+lit = ${ "true" | "false" | (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)?)}
+
+uop = {("!" ~ exp) | ("-" ~ exp)}
+
+logic_ops = { (exp ~ "==" ~ exp )
+          | (exp ~ "<" ~ exp)
+          | (exp ~ ">" ~ exp)
+          | (exp ~ "&&" ~ exp)
+          | (exp ~ "||" ~ exp) } 
+
+arith_ops = { (exp ~ "*" ~ exp)
+      | (exp ~ "/" ~ exp)
+      | (exp ~ "+" ~ exp)
+      | (exp ~ "-" ~ exp)}
+
+binop = { arith_ops
+      | logic_ops
+      | (varid ~ "=" ~ exp)
+      | ("[" ~ type_ ~ "]" ~ exp) }
+
+exp = {("(" ~ exp ~ ")")
+      | binop
+      | uop
+      | lit
+      | varid
+      | (globid ~ "(" ~ exps? ~ ")")}
+
+exps = { exp | (exp ~ "," ~ exps)}
+
+stmt = { blk
+       | ("return" ~ exp? ~ ";")
+       | (vdecl ~ "=" ~ exp ~ ";")
+       | (exp ~ ";")
+       | ("while" ~ "(" ~ exp ~ ")" ~ stmt)
+       | ("if" ~ "(" ~ exp ~ ")" ~ stmt ~ ("else" ~ stmt)?)
+       | ("print" ~ exp ~ ";")
+       | ("print" ~ slit ~ ";")}
+
+stmts = {stmt+}
+blk = { "{" ~ (stmts?) ~ "}" }
+func = {"def" ~ type_ ~ globid ~ "(" ~ (vdecls?) ~ ")" ~ blk}
+
+prog = {SOI ~ (extern_* ~ func+) ~ EOI }
+
+
+
