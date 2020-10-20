@@ -30,17 +30,17 @@ infix = {"==" | "<" | ">" | "&&" | "||" | "*" | "/" | "+" | "-" }
 // binop
 
 exp = { (assignment_exp ~ "=")* ~ assignment_exp  }
-assignment_exp = { or_exp ~ ("||" ~ or_exp)*  }
-or_exp = { and_exp ~ ("&&" ~ and_exp)*  }
-and_exp = { equality_exp ~ ("==" ~ equality_exp)*  }
-equality_exp = { comp_exp ~ (("<" | ">") ~ comp_exp)*  }
-comp_exp = { sum_exp ~ (("+" | "-") ~ sum_exp)*  }
-sum_exp = { prod_exp ~ (("*" | "/") ~ prod_exp)*  }
-prod_exp = { unary_exp  }
-unary_exp = { ("-" ~ unary_exp) | ("!" ~ unary_exp) | primary_exp  }
+assignment_exp = _{ or_exp ~ ("||" ~ or_exp)*  }
+or_exp = _{ and_exp ~ ("&&" ~ and_exp)*  }
+and_exp = _{ equality_exp ~ ("==" ~ equality_exp)*  }
+equality_exp = _{ comp_exp ~ (("<" | ">") ~ comp_exp)*  }
+comp_exp = _{ sum_exp ~ (("+" | "-") ~ sum_exp)*  }
+sum_exp = _{ prod_exp ~ (("*" | "/") ~ prod_exp)*  }
+prod_exp = _{ unary_exp  }
+unary_exp = _{ ("-" ~ unary_exp) | ("!" ~ unary_exp) | primary_exp  }
 
 
-primary_exp = {("(" ~ exp ~ ")")
+primary_exp = _{("(" ~ exp ~ ")")
       | (varid ~ "=" ~ exp)
       | ("[" ~ type_ ~ "]" ~ exp)
       | uop

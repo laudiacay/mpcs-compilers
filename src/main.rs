@@ -29,10 +29,10 @@ fn main() {
     let unparsed_file =
         fs::read_to_string(matches.value_of("input-file").unwrap()).expect("can't read input file");
     let ast_maybe = KaleidoscopeParser::parse(Rule::prog, &unparsed_file)
-        .expect("unsuccessful parse") // unwrap the parse result
-        .next()
-        .unwrap(); // get and unwrap the `file` rule; never fails
-    println!("ast, i hope: {}", ast_maybe);
+        .expect("unsuccessful parse"); // unwrap the parse result
+        //.next()
+        //.unwrap(); // get and unwrap the `file` rule; never fails
+    println!("ast, i hope: {}", &ast_maybe);
 
     // TODO convert AST to YAML
     // TODO handle output file
