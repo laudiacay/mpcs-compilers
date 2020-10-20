@@ -21,13 +21,10 @@ fn main() {
         .author("Julian Beckman & Claudia Richoux")
         .about("MPCS Compilers Autumn 2020 project")
         .args(&[
-            //Arg::from_usage("--config <FILE> 'a required file for the configuration and no short'"),
-            //Arg::from_usage("-d, --debug... 'turns on debugging information and allows multiples'"),
-            //Arg::from_usage("[input] 'an optional input file to use'")
             Arg::from_usage("-v, --verbose 'verbose mode. only warnings will be emitted otherwise for any correct inputs.'"),
             Arg::from_usage("-O 'enable optimizations'"),
-            Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'"),
-            Arg::from_usage("--emit-LLVM 'produce the LLVM IR (unoptimized unless -O is provided)'"),
+            Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'").conflicts_with("emit-llvm"),
+            Arg::from_usage("--emit-llvm 'produce the LLVM IR (unoptimized unless -O is provided)'"),
             Arg::from_usage("-o <output-file> 'required output file'"),
             Arg::from_usage("<input-file> 'sets the input file to use'")
         ])
