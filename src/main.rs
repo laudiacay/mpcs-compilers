@@ -13,7 +13,7 @@ fn main() {
             Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'").conflicts_with("emit-llvm"),
             Arg::from_usage("--emit-llvm 'produce the LLVM IR (unoptimized unless -O is provided)'"),
             Arg::from_usage("-o <output-file> 'required output file'"),
-            Arg::from_usage("<input-file> 'sets the input file to use'")
+            Arg::from_usage("<input-file> 'sets the input file to use'").last(true)
         ])
         .get_matches();
 
