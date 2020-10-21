@@ -28,6 +28,11 @@ uop = {("!" ~ exp) | ("-" ~ exp)}
 // exps at the bottom
 // binop
 
+/*
+sum_exp = _{sum_exp_loud | prod_exp}
+sum_exp_loud = {prod_exp ~ (("+" | "-") ~ prod_exp)+}
+*/
+
 exp = _{ assign_exp_loud | or_exp }
 assign_exp_loud = { (or_exp ~ "=")+ ~ or_exp }
 or_exp = _{ or_exp_loud | and_exp }
@@ -38,8 +43,12 @@ equality_exp = _{ equality_exp_loud | comp_exp }
 equality_exp_loud = {comp_exp ~ ("==" ~ comp_exp)+}
 comp_exp = _{comp_exp_loud | sum_exp}
 comp_exp_loud = { sum_exp ~ (("<" | ">") ~ sum_exp)+ }
-sum_exp = _{sum_exp_loud | prod_exp}
-sum_exp_loud = {prod_exp ~ (("+" | "-") ~ prod_exp)+}
+
+sum_exp = _{prod_exp ~ sum_exp_loud_prime}
+sum_exp_loud = { prod_exp ~ (("+" | "-") ~ sum_exp_loud_prime) }
+sum_exp_loud_prime = { (("+" | "-") ~ prod_exp) ~ sum_exp_loud_prime | "" } 
+
+
 prod_exp = _{prod_exp_loud | unary_exp}
 prod_exp_loud = { unary_exp ~ (("*" | "/") ~ unary_exp)+ }
 unary_exp = _{unary_exp_loud | primary_exp}

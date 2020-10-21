@@ -5,11 +5,11 @@
 
 pub enum AstNode {
     Prog {
-        externs: Option<Vec<Rc<AstNode>>>, 
+        externs: Vec<Rc<AstNode>>, 
         funcs: Vec<Rc<AstNode>>,
     },
     Extern {
-        type: Box<Type>, 
+        type_: Box<Type>, 
         globid: String, 
         tdecls: Option<Vec<Type>>
     },
@@ -25,7 +25,7 @@ pub enum AstNode {
         stmts: Option<Vec<Rc<AstNode>>>,
     }, 
     ReturnStmt {
-        Option<Rc<AstNode>>,
+        exp: Option<Rc<AstNode>>,
     },
     VdeclStmt {
         type_: Box<Type>, 
@@ -78,6 +78,11 @@ pub enum AstNode {
     FuncCall {
         globid: String, 
         exps: Option<Vec<Rc<AstNode>>>
+    },
+
+    VDecl {
+        type_: Type,
+        varid: String,
     },
 }
 

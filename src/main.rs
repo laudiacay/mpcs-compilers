@@ -3,9 +3,15 @@ extern crate pest;
 #[macro_use]
 extern crate pest_derive;
 
+extern crate lalrpop;
+#[macro_use] extern crate lalrpop_util;
+
+use crate::ast::{AstNode, self};
+
 use clap::{App, Arg};
 use pest::Parser;
 use std::fs;
+use std::rc::Rc;
 
 #[derive(Parser)]
 #[grammar = "kaleidoscope.pest"]
@@ -28,11 +34,20 @@ fn main() {
 
     let unparsed_file =
         fs::read_to_string(matches.value_of("input-file").unwrap()).expect("can't read input file");
+    /*
     let ast_maybe = KaleidoscopeParser::parse(Rule::prog, &unparsed_file)
         .expect("unsuccessful parse"); // unwrap the parse result
         //.next()
         //.unwrap(); // get and unwrap the `file` rule; never fails
     println!("ast, i hope: {:#?}", ast_maybe);
+    */
+
+    // LALRPOP:
+    lalrpop_mod!(pub kaleidoscope); // synthesized by LALRPOP
+    let prog = kaleidoscope::ProgParser::new()
+        .parse(&unparsed_file)
+        .unwrap();
+    println!("lalrpop's ast: {:#?}", prog);
 
     // TODO convert AST to YAML
     // TODO handle output file

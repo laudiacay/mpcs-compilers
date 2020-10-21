@@ -1,0 +1,136 @@
+use std::str::FromStr;
+use ast::{self, AstNode};
+
+grammar;
+
+pub Prog: Rc<AstNode> = {
+    <externs:Extern*> <funcs:(Func+)> => Rc::new(AstNode::Prog(externs, funcs))
+};
+
+Extern: Rc<AstNode> = {
+    // TODO tdecls
+    "extern" <t:Type> <gid:GlobId> "(" ")" ";" => Rc::new(AstNode::Extern{
+        type_: t,
+        globid: gid,
+        tdecls: None,
+    })
+
+}
+
+Func: Rc<AstNode> = {
+    "def" <t:Type> <gid:GlobId> "(" <vs:(VDecls)?> ")" <b:Blk> => Rc::new(AstNode::Func{
+        type_: t,
+        globid: gid,
+        vdecls: vs,
+        blk: b,
+    }),
+};
+
+Blk: Rc<AstNode> = {
+    "{" <s:(Stmts)?> "}" => Rc::new(AstNode::Blk{ stmts: s })
+};
+
+Stmts: Vec<Rc<AstNode>> = {
+    <s:(Stmt)+> => s,
+};
+
+Stmt: Rc<AstNode> = {
+    "return" <e:(Exp)?> ";" => Rc::new(AstNode::ReturnStmt{
+        exp: e,
+    }),
+    // TODO other statement rules
+};
+
+Exp: Rc<AstNode> = {
+    // TODO other expression rules
+    <b:BinOp> => b,
+    // <lit:Literal> => lit,
+};
+
+BinOp: Rc<AstNode> = {
+    // TODO logic ops
+    <a:ArithOps> => a,
+};
+
+// precedence 'c' in compiler spec
+ArithOps: Rc<AstNode> = {
+    <l:Exp> "+" <r:ArithFactor> => Rc::new(AstNode::BinOp{
+        op: ast::BOp::Add,
+        lhs: l,
+        rhs: r,
+    }),
+    <l:Exp> "-" <r:ArithFactor> => Rc::new(AstNode::BinOp{
+        op: ast::BOp::Sub,
+        lhs: l,
+        rhs: r,
+    }),
+    ArithFactor,
+};
+
+//TODO these can be done with macros (see section on Tier in the lalrpop tutorial)
+// precedence 'd' in compiler spec
+ArithFactor: Rc<AstNode> = {
+    <l:ArithFactor> "*" <r:ArithTerm> => Rc::new(AstNode::BinOp{
+        op: ast::BOp::Mult,
+        lhs: l,
+        rhs: r,
+    }),
+    <l:ArithFactor> "/" <r:ArithTerm> => Rc::new(AstNode::BinOp{
+        op: ast::BOp::Div,
+        lhs: l,
+        rhs: r,
+    }),
+    ArithTerm,
+};
+
+ArithTerm: Rc<AstNode> = {
+    // TODO other terms?
+    // TODO does this even work?
+    Literal,
+    "(" <Exp> ")"
+};
+
+Literal: Rc<AstNode> = {
+    "true" => ast::Lit::LitTrue,
+    "false" => ast::Lit::LitFalse,
+    <i:r"[0-9]+"> <f:r"(\.[0-9]+)"?> => match f {
+        None => Rc::new(AstNode::Literal(ast::Lit::LitInt(i32::from_str(i).unwrap()))),
+        Some(f) => Rc::new(AstNode::Literal(ast::Lit::LitInt(f64::from_str(format!("{}{}", i, f)).unwrap()))),
+    }
+};
+
+Ident: String = {
+    r"[a-zA-Z_]+[a-zA-Z0-9_]*" => String::from(<>),
+};
+
+VarId: String = {
+    "$" <i:Ident> => i,
+};
+
+GlobId: String = {
+    Ident
+};
+
+
+Type: Box<ast::Type> = {
+    "int"   => Box::new(ast::Type::IntType),
+    "cint"  => Box::new(ast::Type::CIntType),
+    "float" => Box::new(ast::Type::FloatType),
+    "bool"  => Box::new(ast::Type::BoolType),
+    "void"  => Box::new(ast::Type::VoidType),
+    <na:"(noalias)"?> "ref" <t:Type> => match na {
+        None => ast::Type::Ref(false, t),
+        Some(_) => ast::Type::Ref(true, t),
+    }
+};
+
+VDecls: Vec<Rc<AstNode>> = {
+    <vs:(<VDecl> ",")*> <v:VDecl> => vs.push(v),
+}
+
+VDecl: Rc<AstNode> = {
+    <t:Type> <i:VarId> => Rc::new(ast::VDecl{
+        type_: t,
+        varid: varid,
+    })
+}
