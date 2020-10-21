@@ -4,28 +4,81 @@
  */
 
 pub enum AstNode {
-    Prog(Option<Vec<AstNode>>, Vec<AstNode>), // externs, funcs
-    Extern(Type, String, Option<Vec<Type>>), // type, globid, tdecls
-    Func(Type, String, Option<Vec<AstNode>>, AstNode), //type, globid, vdecls, blk
+    Prog {
+        externs: Option<Vec<Rc<AstNode>>>, 
+        funcs: Vec<Rc<AstNode>>,
+    },
+    Extern {
+        type: Box<Type>, 
+        globid: String, 
+        tdecls: Option<Vec<Type>>
+    },
+    Func {
+        type_: Box<Type>, 
+        globid: String, 
+        vdecls: Option<Vec<Rc<AstNode>>>, 
+        blk: Rc<AstNode>,
+    },
 
     // stmt
-    Blk(Option<Vec<AstNode>>), // stmts
-    ReturnStmt(Option<AstNode>), // exp
-    VdeclStmt(Type, String, AstNode), // type, varid, exp
-    ExpStmt(AstNode), // exp
-    WhileStmt(AstNode, AstNode), // cond, stmt
-    IfStmt(AstNode, AstNode, Option<AstNode>), // cond, stmt, else_stmt
-    PrintStmt(AstNode), // exp
-    PrintStmtSlit(String), // string
+    Blk {
+        stmts: Option<Vec<Rc<AstNode>>>,
+    }, 
+    ReturnStmt {
+        Option<Rc<AstNode>>,
+    },
+    VdeclStmt {
+        type_: Box<Type>, 
+        varid: String, 
+        exp: Rc<AstNode>
+    },
+    ExpStmt {
+        exp: Rc<AstNode>,
+    },
+    WhileStmt {
+        cond: Rc<AstNode>, 
+        stmt: Rc<AstNode>
+    },
+    IfStmt {
+        cond: Rc<AstNode>, 
+        stmt: Rc<AstNode>,
+        else_stmt: Option<Rc<AstNode>>
+    },
+    PrintStmt {
+        exp: Rc<AstNode>
+    },
+    PrintStmtSlit {
+        string: String
+    },
 
     // exp
-    Assign(String, AstNode), // varid, exp
-    Cast(Type, AstNode), //type, exp
-    BinOp(BOp, AstNode, AstNode), // op, lhs, rhs
-    UnaryOp(UOp, AstNode), // op, exp
-    Literal(Lit), // lit
-    VarVal(String), // var
-    FuncCall(String, Option<Vec<AstNode>>), // ???? globid, exps
+    Assign {
+        varid: String, 
+        exp: Rc<AstNode>
+    },
+    Cast {
+        type_: Box<Type>, 
+        exp: Rc<AstNode>
+    },
+    BinOp {
+        op: BOp,
+        lhs: Rc<AstNode>, 
+        rhs: Rc<AstNode>
+    },
+    UnaryOp {
+        op: UOp,
+        exp: Rc<AstNode>
+    },
+    Literal {
+        lit: Lit
+    },
+    VarVal {
+        var: String
+    },
+    FuncCall {
+        globid: String, 
+        exps: Option<Vec<Rc<AstNode>>>
+    },
 }
 
 // terminals
