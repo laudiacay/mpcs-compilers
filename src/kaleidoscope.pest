@@ -20,8 +20,6 @@ lit = ${ "true" | "false" | (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)?)}
 
 uop = {("!" ~ exp) | ("-" ~ exp)}
 
-infix = {"==" | "<" | ">" | "&&" | "||" | "*" | "/" | "+" | "-" }
-
 // terminals
 // literal
 // varid
@@ -35,16 +33,24 @@ or_exp = _{ or_exp_loud | and_exp }
 or_exp_loud = { and_exp ~ ("||" ~ and_exp)+ }
 and_exp = _{ and_exp_loud | equality_exp }
 and_exp_loud = { equality_exp ~ ("&&" ~ equality_exp)+ }
-equality_exp = _{ equality_exp_loud | comp_exp }
-equality_exp_loud = {comp_exp ~ ("==" ~ comp_exp)+}
-comp_exp = _{comp_exp_loud | sum_exp}
-comp_exp_loud = { sum_exp ~ (("<" | ">") ~ sum_exp)+ }
-sum_exp = _{sum_exp_loud | prod_exp}
-sum_exp_loud = {prod_exp ~ (("+" | "-") ~ prod_exp)+}
-prod_exp = _{prod_exp_loud | unary_exp}
-prod_exp_loud = { unary_exp ~ (("*" | "/") ~ unary_exp)+ }
-unary_exp = _{unary_exp_loud | primary_exp}
-unary_exp_loud = { ("-" ~ unary_exp) | ("!" ~ unary_exp) }
+equality_exp = _{ equality_exp_loud | gt_exp }
+equality_exp_loud = {gt_exp ~ ("==" ~ gt_exp)+}
+gt_exp = _{gt_exp_loud | lt_exp}
+gt_exp_loud = {lt_exp ~ (">" ~ lt_exp)+ }
+lt_exp = _{lt_exp_loud | sum_exp}
+lt_exp_loud = { sum_exp ~ ("<" ~ sum_exp)+ }
+sum_exp = _{sum_exp_loud | min_exp}
+sum_exp_loud = {min_exp ~ ("+" ~ min_exp)+}
+min_exp = _{min_exp_loud | prod_exp}
+min_exp_loud = {prod_exp ~ ("-" ~ prod_exp)+}
+prod_exp = _{prod_exp_loud | div_exp}
+prod_exp_loud = { div_exp ~ ("*" ~ div_exp)+ }
+div_exp = _{div_exp_loud | neg_exp}
+div_exp_loud = { neg_exp ~ ("/" ~ neg_exp)+ }
+neg_exp = _{neg_exp_loud | binnot_exp}
+neg_exp_loud = { "-" ~ neg_exp }
+binnot_exp = _{binnot_exp_loud | primary_exp}
+binnot_exp_loud = { "!" ~ binnot_exp }
 
 
 primary_exp = {("(" ~ exp ~ ")")
