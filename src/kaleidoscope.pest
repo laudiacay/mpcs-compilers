@@ -29,18 +29,25 @@ infix = {"==" | "<" | ">" | "&&" | "||" | "*" | "/" | "+" | "-" }
 // exps at the bottom
 // binop
 
-exp = { (assignment_exp ~ "=")* ~ assignment_exp  }
-assignment_exp = _{ or_exp ~ ("||" ~ or_exp)*  }
-or_exp = _{ and_exp ~ ("&&" ~ and_exp)*  }
-and_exp = _{ equality_exp ~ ("==" ~ equality_exp)*  }
-equality_exp = _{ comp_exp ~ (("<" | ">") ~ comp_exp)*  }
-comp_exp = _{ sum_exp ~ (("+" | "-") ~ sum_exp)*  }
-sum_exp = _{ prod_exp ~ (("*" | "/") ~ prod_exp)*  }
-prod_exp = _{ unary_exp  }
-unary_exp = _{ ("-" ~ unary_exp) | ("!" ~ unary_exp) | primary_exp  }
+exp = _{ assign_exp_loud | or_exp }
+assign_exp_loud = { (or_exp ~ "=")+ ~ or_exp }
+or_exp = _{ or_exp_loud | and_exp }
+or_exp_loud = { and_exp ~ ("||" ~ and_exp)+ }
+and_exp = _{ and_exp_loud | equality_exp }
+and_exp_loud = { equality_exp ~ ("&&" ~ equality_exp)+ }
+equality_exp = _{ equality_exp_loud | comp_exp }
+equality_exp_loud = {comp_exp ~ ("==" ~ comp_exp)+}
+comp_exp = _{comp_exp_loud | sum_exp}
+comp_exp_loud = { sum_exp ~ (("<" | ">") ~ sum_exp)+ }
+sum_exp = _{sum_exp_loud | prod_exp}
+sum_exp_loud = {prod_exp ~ (("+" | "-") ~ prod_exp)+}
+prod_exp = _{prod_exp_loud | unary_exp}
+prod_exp_loud = { unary_exp ~ (("*" | "/") ~ unary_exp)+ }
+unary_exp = _{unary_exp_loud | primary_exp}
+unary_exp_loud = { ("-" ~ unary_exp) | ("!" ~ unary_exp) }
 
 
-primary_exp = _{("(" ~ exp ~ ")")
+primary_exp = {("(" ~ exp ~ ")")
       | (varid ~ "=" ~ exp)
       | ("[" ~ type_ ~ "]" ~ exp)
       | uop
