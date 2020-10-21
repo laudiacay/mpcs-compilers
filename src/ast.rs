@@ -83,7 +83,7 @@ pub enum AstNode {
     },
 
     VDecl {
-        type_: Type,
+        type_: Box<Type>,
         varid: String,
     },
 }

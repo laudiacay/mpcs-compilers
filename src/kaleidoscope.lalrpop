@@ -5,7 +5,10 @@ use std::rc::Rc;
 grammar;
 
 pub Prog: Rc<AstNode> = {
-    <externs:Extern*> <funcs:(Func+)> => Rc::new(AstNode::Prog(externs, funcs))
+    <e:Extern*> <f:(Func+)> => Rc::new(AstNode::Prog{
+        externs: e, 
+        funcs: f,
+    })
 };
 
 Extern: Rc<AstNode> = {
@@ -92,11 +95,11 @@ ArithTerm: Rc<AstNode> = {
 };
 
 Literal: Rc<AstNode> = {
-    "true" => Lit::LitTrue,
-    "false" => Lit::LitFalse,
+    "true"  => Rc::new(AstNode::Literal{ lit: Lit::LitTrue }),
+    "false" => Rc::new(AstNode::Literal{ lit: Lit::LitFalse }),
     <i:r"[0-9]+"> <f:r"(\.[0-9]+)"?> => match f {
-        None => Rc::new(AstNode::Literal(Lit::LitInt(i32::from_str(i).unwrap()))),
-        Some(f) => Rc::new(AstNode::Literal(Lit::LitInt(f64::from_str(format!("{}{}", i, f)).unwrap()))),
+        None => Rc::new(AstNode::Literal{ lit: Lit::LitInt(i32::from_str(i).unwrap()) }),
+        Some(f) => Rc::new(AstNode::Literal { lit: Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()) }),
     }
 };
 
@@ -120,18 +123,22 @@ Type: Box<Type> = {
     "bool"  => Box::new(Type::BoolType),
     "void"  => Box::new(Type::VoidType),
     <na:"(noalias)"?> "ref" <t:Type> => match na {
-        None => Type::Ref(false, t),
-        Some(_) => Type::Ref(true, t),
+        None    => Box::new(Type::Ref(false, t)),
+        Some(_) => Box::new(Type::Ref(true, t)),
     }
 };
 
 VDecls: Vec<Rc<AstNode>> = {
-    <vs:(<VDecl> ",")*> <v:VDecl> => vs.push(v),
+    <vs:(<VDecl> ",")*> <v:VDecl> => {
+        let mut vs = vs;
+        vs.push(v);
+        vs
+    }
 }
 
 VDecl: Rc<AstNode> = {
-    <t:Type> <i:VarId> => Rc::new(VDecl{
+    <t:Type> <i:VarId> => Rc::new(AstNode::VDecl{
         type_: t,
-        varid: varid,
+        varid: i,
     })
 }
