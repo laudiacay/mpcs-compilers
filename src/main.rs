@@ -32,7 +32,7 @@ fn main() {
         .expect("unsuccessful parse"); // unwrap the parse result
         //.next()
         //.unwrap(); // get and unwrap the `file` rule; never fails
-    println!("ast, i hope: {}", &ast_maybe);
+    println!("ast, i hope: {:#?}", ast_maybe);
 
     // TODO convert AST to YAML
     // TODO handle output file
