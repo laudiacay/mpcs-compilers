@@ -20,8 +20,6 @@ lit = ${ "true" | "false" | (ASCII_DIGIT+ ~ ("." ~ ASCII_DIGIT+)?)}
 
 uop = {("!" ~ exp) | ("-" ~ exp)}
 
-infix = {"==" | "<" | ">" | "&&" | "||" | "*" | "/" | "+" | "-" }
-
 // terminals
 // literal
 // varid
@@ -45,7 +43,6 @@ prod_exp = _{prod_exp_loud | unary_exp}
 prod_exp_loud = { unary_exp ~ (("*" | "/") ~ prod_exp) }
 unary_exp = _{unary_exp_loud | primary_exp}
 unary_exp_loud = { ("-" ~ unary_exp) | ("!" ~ unary_exp) }
-
 
 primary_exp = {("(" ~ exp ~ ")")
       | (varid ~ "=" ~ exp)
