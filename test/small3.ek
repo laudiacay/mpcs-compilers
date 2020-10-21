@@ -1,2 +1,2 @@
-def int run () { return 1 - 2 - 3 - 4; }
+def int run () { return (0+1) - 2 - 3 - 4*5; }
 
