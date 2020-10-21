@@ -1,6 +1,7 @@
 use std::str::FromStr;
-use ast::{self, AstNode};
+use crate::ast::*;
 
+use std::rc::Rc;
 grammar;
 
 pub Prog: Rc<AstNode> = {
@@ -55,12 +56,12 @@ BinOp: Rc<AstNode> = {
 // precedence 'c' in compiler spec
 ArithOps: Rc<AstNode> = {
     <l:Exp> "+" <r:ArithFactor> => Rc::new(AstNode::BinOp{
-        op: ast::BOp::Add,
+        op: BOp::Add,
         lhs: l,
         rhs: r,
     }),
     <l:Exp> "-" <r:ArithFactor> => Rc::new(AstNode::BinOp{
-        op: ast::BOp::Sub,
+        op: BOp::Sub,
         lhs: l,
         rhs: r,
     }),
@@ -71,12 +72,12 @@ ArithOps: Rc<AstNode> = {
 // precedence 'd' in compiler spec
 ArithFactor: Rc<AstNode> = {
     <l:ArithFactor> "*" <r:ArithTerm> => Rc::new(AstNode::BinOp{
-        op: ast::BOp::Mult,
+        op: BOp::Mult,
         lhs: l,
         rhs: r,
     }),
     <l:ArithFactor> "/" <r:ArithTerm> => Rc::new(AstNode::BinOp{
-        op: ast::BOp::Div,
+        op: BOp::Div,
         lhs: l,
         rhs: r,
     }),
@@ -91,11 +92,11 @@ ArithTerm: Rc<AstNode> = {
 };
 
 Literal: Rc<AstNode> = {
-    "true" => ast::Lit::LitTrue,
-    "false" => ast::Lit::LitFalse,
+    "true" => Lit::LitTrue,
+    "false" => Lit::LitFalse,
     <i:r"[0-9]+"> <f:r"(\.[0-9]+)"?> => match f {
-        None => Rc::new(AstNode::Literal(ast::Lit::LitInt(i32::from_str(i).unwrap()))),
-        Some(f) => Rc::new(AstNode::Literal(ast::Lit::LitInt(f64::from_str(format!("{}{}", i, f)).unwrap()))),
+        None => Rc::new(AstNode::Literal(Lit::LitInt(i32::from_str(i).unwrap()))),
+        Some(f) => Rc::new(AstNode::Literal(Lit::LitInt(f64::from_str(format!("{}{}", i, f)).unwrap()))),
     }
 };
 
@@ -112,15 +113,15 @@ GlobId: String = {
 };
 
 
-Type: Box<ast::Type> = {
-    "int"   => Box::new(ast::Type::IntType),
-    "cint"  => Box::new(ast::Type::CIntType),
-    "float" => Box::new(ast::Type::FloatType),
-    "bool"  => Box::new(ast::Type::BoolType),
-    "void"  => Box::new(ast::Type::VoidType),
+Type: Box<Type> = {
+    "int"   => Box::new(Type::IntType),
+    "cint"  => Box::new(Type::CIntType),
+    "float" => Box::new(Type::FloatType),
+    "bool"  => Box::new(Type::BoolType),
+    "void"  => Box::new(Type::VoidType),
     <na:"(noalias)"?> "ref" <t:Type> => match na {
-        None => ast::Type::Ref(false, t),
-        Some(_) => ast::Type::Ref(true, t),
+        None => Type::Ref(false, t),
+        Some(_) => Type::Ref(true, t),
     }
 };
 
@@ -129,7 +130,7 @@ VDecls: Vec<Rc<AstNode>> = {
 }
 
 VDecl: Rc<AstNode> = {
-    <t:Type> <i:VarId> => Rc::new(ast::VDecl{
+    <t:Type> <i:VarId> => Rc::new(VDecl{
         type_: t,
         varid: varid,
     })

@@ -4,14 +4,13 @@ extern crate pest;
 extern crate pest_derive;
 
 extern crate lalrpop;
-#[macro_use] extern crate lalrpop_util;
-
-use crate::ast::{AstNode, self};
+#[macro_use]
+extern crate lalrpop_util;
+mod ast;
 
 use clap::{App, Arg};
-use pest::Parser;
+//use pest::Parser;
 use std::fs;
-use std::rc::Rc;
 
 #[derive(Parser)]
 #[grammar = "kaleidoscope.pest"]
