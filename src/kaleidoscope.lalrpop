@@ -1,9 +1,31 @@
 use std::str::FromStr;
+use std::rc::Rc;
 use crate::ast::*;
 
-use std::rc::Rc;
 grammar;
 
+// macro for precedence climbing for binary operations
+Tier<Op,NextTier>: Rc<AstNode> = {
+    <l:Tier<Op,NextTier>> <bop:Op> <r:NextTier> => Rc::new(AstNode::BinOp{
+        op: bop,
+        lhs: l,
+        rhs: r,
+    }),
+    NextTier
+};
+
+// comma-separated list macro
+List<Decl>: Vec<Rc<AstNode>> = {
+    <ds:(<Decl> ",")*> <d:Decl> => {
+        let mut ds = ds;
+        ds.push(d);
+        ds
+    }
+}
+
+
+// rule for the entire program
+// used to generate the actual parser in main.rs
 pub Prog: Rc<AstNode> = {
     <e:Extern*> <f:(Func+)> => Rc::new(AstNode::Prog{
         externs: e, 
@@ -12,14 +34,12 @@ pub Prog: Rc<AstNode> = {
 };
 
 Extern: Rc<AstNode> = {
-    // TODO tdecls
-    "extern" <t:Type> <gid:GlobId> "(" ")" ";" => Rc::new(AstNode::Extern{
+    "extern" <t:Type> <gid:GlobId> "(" <tds:TDecls?> ")" ";" => Rc::new(AstNode::Extern{
         type_: t,
         globid: gid,
-        tdecls: None,
+        tdecls: tds,
     })
-
-}
+};
 
 Func: Rc<AstNode> = {
     "def" <t:Type> <gid:GlobId> "(" <vs:(VDecls)?> ")" <b:Blk> => Rc::new(AstNode::Func{
@@ -31,7 +51,7 @@ Func: Rc<AstNode> = {
 };
 
 Blk: Rc<AstNode> = {
-    "{" <s:(Stmts)?> "}" => Rc::new(AstNode::Blk{ stmts: s })
+    "{" <s:(Stmts)?> "}" => Rc::new(AstNode::Blk{ stmts: s }),
 };
 
 Stmts: Vec<Rc<AstNode>> = {
@@ -39,59 +59,117 @@ Stmts: Vec<Rc<AstNode>> = {
 };
 
 Stmt: Rc<AstNode> = {
+    Blk,
     "return" <e:(Exp)?> ";" => Rc::new(AstNode::ReturnStmt{
         exp: e,
     }),
-    // TODO other statement rules
+    <v:VDecl> "=" <e:Exp> ";" => Rc::new(AstNode::VDeclStmt{
+        vdecl: v,
+        exp: e,
+    }),
+    <e:Exp> ";" => Rc::new(AstNode::ExpStmt{
+        exp: e,
+    }),
+    "while" "(" <c:Exp> ")" <s:Stmt> => Rc::new(AstNode::WhileStmt{
+        cond: c,
+        stmt: s,
+    }),
+    "if" "(" <c:Exp> ")" <s:Stmt> <e:("else" <Stmt>)?> => Rc::new(AstNode::IfStmt{
+        cond: c,
+        stmt: s,
+        else_stmt: e,
+    }),
+    "print" <e:Exp> ";" => Rc::new(AstNode::PrintStmt{
+        exp: e,
+    }), 
+    "print" <s:Slit> ";" => Rc::new(AstNode::PrintStmtSlit {
+        string: s,
+    }),
 };
 
+Exps = List<Exp>;
+
+// lowest-precedence expressions
+// see Term for highest prec., -Op rules for other precedences
 Exp: Rc<AstNode> = {
-    // TODO other expression rules
-    <b:BinOp> => b,
-    // <lit:Literal> => lit,
+    Assignment,
+    BinOp,
 };
 
+Assignment: Rc<AstNode> = {
+    <v:VarId> "=" <e:Exp> => Rc::new(AstNode::Assign{
+        varid: v,
+        exp: e,
+    }),
+};
+
+// all binary operations excluding casts and assignments
 BinOp: Rc<AstNode> = {
-    // TODO logic ops
-    <a:ArithOps> => a,
+    // logic operations are lower-precedence than arithmetic, so check those first
+    LogicOps
 };
 
-// precedence 'c' in compiler spec
-ArithOps: Rc<AstNode> = {
-    <l:Exp> "+" <r:ArithFactor> => Rc::new(AstNode::BinOp{
-        op: BOp::Add,
-        lhs: l,
-        rhs: r,
-    }),
-    <l:Exp> "-" <r:ArithFactor> => Rc::new(AstNode::BinOp{
-        op: BOp::Sub,
-        lhs: l,
-        rhs: r,
-    }),
-    ArithFactor,
+LogicOpsOp: BOp = {
+    "||" => BOp::Or    
+};
+LogicOps = Tier<LogicOpsOp, LogicAnd>;
+
+AndOp: BOp = {
+    "&&" => BOp::And
+};
+LogicAnd = Tier<AndOp, LogicEq>;
+
+EqOp: BOp = {
+    "==" => BOp::EqTo,
+};
+LogicEq = Tier<EqOp, LogicComp>;
+
+CompOp: BOp = {
+    "<" => BOp::Lt,
+    ">" => BOp::Gt,
+};
+LogicComp = Tier<CompOp, ArithOps>; // we're ready to do arithmetic
+
+ArithOpsOp: BOp = {  // how do you name things
+    "+" => BOp::Add,
+    "-" => BOp::Sub,
+};
+ArithOps = Tier<ArithOpsOp, ArithFactor>;
+
+FactorOp: BOp = {
+    "*" => BOp::Mult,
+    "/" => BOp::Div
 };
 
-//TODO these can be done with macros (see section on Tier in the lalrpop tutorial)
-// precedence 'd' in compiler spec
-ArithFactor: Rc<AstNode> = {
-    <l:ArithFactor> "*" <r:ArithTerm> => Rc::new(AstNode::BinOp{
-        op: BOp::Mult,
-        lhs: l,
-        rhs: r,
-    }),
-    <l:ArithFactor> "/" <r:ArithTerm> => Rc::new(AstNode::BinOp{
-        op: BOp::Div,
-        lhs: l,
-        rhs: r,
-    }),
-    ArithTerm,
-};
+ArithFactor = Tier<FactorOp, TypeCast>;
 
-ArithTerm: Rc<AstNode> = {
-    // TODO other terms?
-    // TODO does this even work?
-    Literal,
+// Expressions that need to be parsed first (including high-precedence ops, literals, etc.)
+Term: Rc<AstNode> = {
     "(" <Exp> ")"
+    Literal,
+    VarId,
+    FuncCall,
+};
+
+// Needed to put these in the precedence chain somewhere, arbitrarily decided
+TypeCast: Rc<AstNode> = {
+    "[" <t:Type> "]" <e:TypeCast> => Rc::new(AstNode::Cast{
+        type_: t,
+        exp: e,
+    }),
+    UOp,
+};
+
+UOp: Rc<AstNode> = {
+    "!" <e:UOp> => Rc::new(AstNode::UOp{
+        op: BitwiseNeg,
+        exp: e,
+    }),
+    "-" <e:UOp> => Rc::new(AstNode::UOp{
+        op: SignedNeg,
+        exp: e,
+    }),
+    Term,
 };
 
 Literal: Rc<AstNode> = {
@@ -101,6 +179,18 @@ Literal: Rc<AstNode> = {
         None => Rc::new(AstNode::Literal{ lit: Lit::LitInt(i32::from_str(i).unwrap()) }),
         Some(f) => Rc::new(AstNode::Literal { lit: Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()) }),
     }
+};
+
+
+FuncCall: Rc<AstNode> = {
+    <g:GlobId> "(" <e:Exps?> ")" => Rc::new(AstNode::FuncCall{
+        globid: g,
+        exps: e,
+    }),
+};
+
+Slit: String = {
+    r#""[^"\n\r]*""# => String::(<>),
 };
 
 Ident: String = {
@@ -115,7 +205,6 @@ GlobId: String = {
     Ident
 };
 
-
 Type: Box<Type> = {
     "int"   => Box::new(Type::IntType),
     "cint"  => Box::new(Type::CIntType),
@@ -128,13 +217,9 @@ Type: Box<Type> = {
     }
 };
 
-VDecls: Vec<Rc<AstNode>> = {
-    <vs:(<VDecl> ",")*> <v:VDecl> => {
-        let mut vs = vs;
-        vs.push(v);
-        vs
-    }
-}
+TDecls = List<Type>;
+
+VDecls = List<VDecl>;
 
 VDecl: Rc<AstNode> = {
     <t:Type> <i:VarId> => Rc::new(AstNode::VDecl{

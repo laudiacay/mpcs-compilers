@@ -30,8 +30,7 @@ pub enum AstNode {
         exp: Option<Rc<AstNode>>,
     },
     VdeclStmt {
-        type_: Box<Type>,
-        varid: String,
+        vdecl: RC<AstNode>,
         exp: Rc<AstNode>,
     },
     ExpStmt {
