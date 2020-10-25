@@ -247,3 +247,11 @@ VDecl: Rc<AstNode> = {
         varid: i,
     })
 }
+
+// uh I think this ignores comments
+match {
+    r"#[^\n\r]*[\n\r]*" => { },
+} else {
+    r"\s*" => { },
+    _
+}

@@ -1,0 +1,6 @@
+def int run() {
+    # testing whether comments are ignored
+    print "my favorite symbols are # and @";
+    int $x = $y = 5 * $z / 10;
+    return 69; #inline comments are fun too
+}
