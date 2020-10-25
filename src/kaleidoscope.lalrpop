@@ -58,7 +58,9 @@ Stmts: Vec<Rc<AstNode>> = {
     <s:(Stmt)+> => s,
 };
 
-Stmt: Rc<AstNode> = {
+Stmt = StmtRestr<"I">;
+
+StmtRestr<I>: Rc<AstNode> = {
     Blk,
     "return" <e:(Exp)?> ";" => Rc::new(AstNode::ReturnStmt{
         exp: e,
@@ -70,20 +72,29 @@ Stmt: Rc<AstNode> = {
     <e:Exp> ";" => Rc::new(AstNode::ExpStmt{
         exp: e,
     }),
-    "while" "(" <c:Exp> ")" <s:Stmt> => Rc::new(AstNode::WhileStmt{
+    "while" "(" <c:Exp> ")" <s:StmtRestr<I>> => Rc::new(AstNode::WhileStmt{
         cond: c,
         stmt: s,
-    }),
-    "if" "(" <c:Exp> ")" <s:Stmt> <e:("else" <Stmt>)?> => Rc::new(AstNode::IfStmt{
-        cond: c,
-        stmt: s,
-        else_stmt: e,
     }),
     "print" <e:Exp> ";" => Rc::new(AstNode::PrintStmt{
         exp: e,
     }), 
-    "print" <s:Slit> ";" => Rc::new(AstNode::PrintStmtSlit {
+    "print" <s:Slit> ";" => Rc::new(AstNode::PrintStmtSlit{
         string: s,
+    }),
+    IfStmt<I>,
+};
+
+IfStmt<I>: Rc<AstNode> = {
+    "if" "(" <c:Exp> ")" <s:StmtRestr<"I">> if I != "" => Rc::new(AstNode::IfStmt{
+        cond: c,
+        stmt: s,
+        else_stmt: None,
+    }),
+    "if" "(" <c:Exp> ")" <s:StmtRestr<"">> <e:("else" <StmtRestr<I>>)> => Rc::new(AstNode::IfStmt{
+        cond: c,
+        stmt: s,
+        else_stmt: Some(e),
     }),
 };
 
@@ -145,9 +156,11 @@ ArithFactor = Tier<FactorOp, TypeCast>;
 
 // Expressions that need to be parsed first (including high-precedence ops, literals, etc.)
 Term: Rc<AstNode> = {
-    "(" <Exp> ")"
+    "(" <Exp> ")",
     Literal,
-    VarId,
+    <v:VarId> => Rc::new(AstNode::VarVal{
+        var: v,
+    }),
     FuncCall,
 };
 
@@ -161,12 +174,12 @@ TypeCast: Rc<AstNode> = {
 };
 
 UOp: Rc<AstNode> = {
-    "!" <e:UOp> => Rc::new(AstNode::UOp{
-        op: BitwiseNeg,
+    "!" <e:UOp> => Rc::new(AstNode::UnaryOp{
+        op: UOp::BitwiseNeg,
         exp: e,
     }),
-    "-" <e:UOp> => Rc::new(AstNode::UOp{
-        op: SignedNeg,
+    "-" <e:UOp> => Rc::new(AstNode::UnaryOp{
+        op: UOp::SignedNeg,
         exp: e,
     }),
     Term,
@@ -175,7 +188,7 @@ UOp: Rc<AstNode> = {
 Literal: Rc<AstNode> = {
     "true"  => Rc::new(AstNode::Literal{ lit: Lit::LitTrue }),
     "false" => Rc::new(AstNode::Literal{ lit: Lit::LitFalse }),
-    <i:r"[0-9]+"> <f:r"(\.[0-9]+)"?> => match f {
+    <i:r"[0-9]+"> <f:r"\.[0-9]+"?> => match f {
         None => Rc::new(AstNode::Literal{ lit: Lit::LitInt(i32::from_str(i).unwrap()) }),
         Some(f) => Rc::new(AstNode::Literal { lit: Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()) }),
     }
@@ -190,7 +203,7 @@ FuncCall: Rc<AstNode> = {
 };
 
 Slit: String = {
-    r#""[^"\n\r]*""# => String::(<>),
+    r#""[^"\n\r]*""# => String::from(<>),
 };
 
 Ident: String = {
@@ -211,13 +224,20 @@ Type: Box<Type> = {
     "float" => Box::new(Type::FloatType),
     "bool"  => Box::new(Type::BoolType),
     "void"  => Box::new(Type::VoidType),
-    <na:"(noalias)"?> "ref" <t:Type> => match na {
+    <na:"noalias"?> "ref" <t:Type> => match na {
         None    => Box::new(Type::Ref(false, t)),
         Some(_) => Box::new(Type::Ref(true, t)),
     }
 };
 
-TDecls = List<Type>;
+// TDecls = List<Type>;
+TDecls: Vec<Box<Type>> = {
+    <ds:(<Type> ",")*> <d:Type> => {
+        let mut ds = ds;
+        ds.push(d);
+        ds
+    }
+}
 
 VDecls = List<VDecl>;
 

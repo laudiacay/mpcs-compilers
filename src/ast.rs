@@ -13,7 +13,7 @@ pub enum AstNode {
     Extern {
         type_: Box<Type>,
         globid: String,
-        tdecls: Option<Vec<Type>>,
+        tdecls: Option<Vec<Box<Type>>>,
     },
     Func {
         type_: Box<Type>,
@@ -29,8 +29,8 @@ pub enum AstNode {
     ReturnStmt {
         exp: Option<Rc<AstNode>>,
     },
-    VdeclStmt {
-        vdecl: RC<AstNode>,
+    VDeclStmt {
+        vdecl: Rc<AstNode>,
         exp: Rc<AstNode>,
     },
     ExpStmt {
@@ -110,7 +110,7 @@ pub enum Type {
 //binary operators
 #[derive(Debug)]
 pub enum BOp {
-    Equals, // =
+//    Equals, // = treated separately from other binops
     Mult,   // *
     Div,    // /
     Add,    // +
