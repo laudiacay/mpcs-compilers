@@ -110,16 +110,16 @@ pub enum Type {
 //binary operators
 #[derive(Debug)]
 pub enum BOp {
-//    Equals, // = treated separately from other binops
-    Mult,   // *
-    Div,    // /
-    Add,    // +
-    Sub,    // -
-    EqTo,   // ==
-    Gt,     // >
-    Lt,     // <
-    And,    // &&
-    Or,     // ||
+    //    Equals, // = treated separately from other binops
+    Mult, // *
+    Div,  // /
+    Add,  // +
+    Sub,  // -
+    EqTo, // ==
+    Gt,   // >
+    Lt,   // <
+    And,  // &&
+    Or,   // ||
 }
 
 #[derive(Debug)]

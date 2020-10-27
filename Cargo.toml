@@ -11,8 +11,8 @@ lalrpop = { version = "0.19.0", features = ["lexer"] }
 
 [dependencies]
 clap = "2.33"
-pest = "2.0"
-pest_derive = "2.0"
 lalrpop = "0.19.0"
 lalrpop-util = "0.19.0"
 regex = "1"
+serde = { version = "1.0", features = ["derive"] }
+serde_yaml = "0.8"
