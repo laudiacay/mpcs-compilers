@@ -7,7 +7,9 @@ mod ast;
 
 use clap::{App, Arg};
 //use pest::Parser;
-use std::fs;
+use std::fs::{read_to_string, File};
+
+lalrpop_mod!(pub kaleidoscope); // synthesized by LALRPOP
 
 fn main() {
     let matches = App::new("ekcc")
@@ -24,19 +26,40 @@ fn main() {
         ])
         .get_matches();
 
-    let unparsed_file =
-        fs::read_to_string(matches.value_of("input-file").unwrap()).expect("can't read input file");
+    let file_contents_str =
+        read_to_string(matches.value_of("input-file").unwrap()).expect("can't read input file");
 
-    // LALRPOP:
-    lalrpop_mod!(pub kaleidoscope); // synthesized by LALRPOP
     let prog = kaleidoscope::ProgParser::new()
-        .parse(&unparsed_file)
+        .parse(&file_contents_str)
         .unwrap();
-    println!("lalrpop's ast: {:#?}", prog);
+    if matches.is_present("emit-ast") {
+        let output_file = matches.value_of("o").unwrap();
+        let file = File::create(output_file)
+            .expect(&format!("failed to create output file at {}", output_file).to_string());
+        serde_yaml::to_writer(file, &prog).expect("failed to write ast to file");
+    }
+}
 
-    // TODO convert AST to YAML
-    // TODO handle output file
-    // TODO handle optimizations
-    // TODO handle verbose
-    // TODO handle emit-ast vs llvm switch
+#[cfg(test)]
+mod tests {
+    use crate::kaleidoscope::ProgParser;
+    use std::fs::read_to_string;
+    #[test]
+    fn can_parse_and_serialize_test1() {
+        let file_contents_str = read_to_string("test/test1.ek").unwrap();
+        let prog = ProgParser::new().parse(&file_contents_str).unwrap();
+        println!(
+            "yaml representation of test1.ek:\n{:?}",
+            serde_yaml::to_string(&prog).unwrap()
+        );
+    }
+    #[test]
+    fn can_parse_and_serialize_test2() {
+        let file_contents_str = read_to_string("test/test2.ek").unwrap();
+        let prog = ProgParser::new().parse(&file_contents_str).unwrap();
+        println!(
+            "yaml representation of test2.ek:\n{:?}",
+            serde_yaml::to_string(&prog).unwrap()
+        );
+    }
 }

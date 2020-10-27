@@ -5,8 +5,8 @@ use crate::ast::*;
 grammar;
 
 // macro for precedence climbing for binary operations
-Tier<Op,NextTier>: Rc<AstNode> = {
-    <l:Tier<Op,NextTier>> <bop:Op> <r:NextTier> => Rc::new(AstNode::BinOp{
+Tier<Op,NextTier>: Rc<Exp> = {
+    <l:Tier<Op,NextTier>> <bop:Op> <r:NextTier> => Rc::new(Exp::BinOp{
         op: bop,
         lhs: l,
         rhs: r,
@@ -15,8 +15,8 @@ Tier<Op,NextTier>: Rc<AstNode> = {
 };
 
 // comma-separated list macro
-List<Decl>: Vec<Rc<AstNode>> = {
-    <ds:(<Decl> ",")*> <d:Decl> => {
+List<T>: Vec<T> = {
+    <ds:(<T> ",")*> <d:T> => {
         let mut ds = ds;
         ds.push(d);
         ds
@@ -26,72 +26,64 @@ List<Decl>: Vec<Rc<AstNode>> = {
 
 // rule for the entire program
 // used to generate the actual parser in main.rs
-pub Prog: Rc<AstNode> = {
-    <e:Extern*> <f:(Func+)> => Rc::new(AstNode::Prog{
+pub Prog: Prog = {
+    <e:Extern*> <f:(Func+)> => Prog{
         externs: e, 
         funcs: f,
-    })
+    }
 };
 
-Extern: Rc<AstNode> = {
-    "extern" <t:Type> <gid:GlobId> "(" <tds:TDecls?> ")" ";" => Rc::new(AstNode::Extern{
+Extern: Extern = {
+    "extern" <t:Type> <gid:GlobId> "(" <tds:TDecls?> ")" ";" => Extern{
         type_: t,
         globid: gid,
         tdecls: tds,
-    })
+    }
 };
 
-Func: Rc<AstNode> = {
-    "def" <t:Type> <gid:GlobId> "(" <vs:(VDecls)?> ")" <b:Blk> => Rc::new(AstNode::Func{
+Func: Func = {
+    "def" <t:Type> <gid:GlobId> "(" <vs:(VDecls)?> ")" <b:Blk> => Func{
         type_: t,
         globid: gid,
         vdecls: vs,
         blk: b,
-    }),
+    }
 };
 
-Blk: Rc<AstNode> = {
-    "{" <s:(Stmts)?> "}" => Rc::new(AstNode::Blk{ stmts: s }),
+Blk: Block = {
+    "{" <s:(Stmts)?> "}" => Block{ stmts: s },
 };
 
-Stmts: Vec<Rc<AstNode>> = {
+Stmts: Vec<Rc<Stmt>> = {
     <s:(Stmt)+> => s,
 };
 
 Stmt = StmtRestr<"I">;
 
-StmtRestr<I>: Rc<AstNode> = {
-    Blk,
-    "return" <e:(Exp)?> ";" => Rc::new(AstNode::ReturnStmt{
-        exp: e,
-    }),
-    <v:VDecl> "=" <e:Exp> ";" => Rc::new(AstNode::VDeclStmt{
+StmtRestr<I>: Rc<Stmt> = {
+    <b:Blk> => Rc::new(Stmt::Blk(b)),
+    "return" <e:(Exp)?> ";" => Rc::new(Stmt::ReturnStmt(e)),
+    <v:VDecl> "=" <e:Exp> ";" => Rc::new(Stmt::VDeclStmt{
         vdecl: v,
         exp: e,
     }),
-    <e:Exp> ";" => Rc::new(AstNode::ExpStmt{
-        exp: e,
-    }),
-    "while" "(" <c:Exp> ")" <s:StmtRestr<I>> => Rc::new(AstNode::WhileStmt{
+    <e:Exp> ";" => Rc::new(Stmt::ExpStmt(e)),
+    "while" "(" <c:Exp> ")" <s:StmtRestr<I>> => Rc::new(Stmt::WhileStmt{
         cond: c,
         stmt: s,
     }),
-    "print" <e:Exp> ";" => Rc::new(AstNode::PrintStmt{
-        exp: e,
-    }), 
-    "print" <s:Slit> ";" => Rc::new(AstNode::PrintStmtSlit{
-        string: s,
-    }),
+    "print" <e:Exp> ";" => Rc::new(Stmt::PrintStmt(e)),
+    "print" <s:Slit> ";" => Rc::new(Stmt::PrintStmtSlit(s)),
     IfStmt<I>,
 };
 
-IfStmt<I>: Rc<AstNode> = {
-    "if" "(" <c:Exp> ")" <s:StmtRestr<"I">> if I != "" => Rc::new(AstNode::IfStmt{
+IfStmt<I>: Rc<Stmt> = {
+    "if" "(" <c:Exp> ")" <s:StmtRestr<"I">> if I != "" => Rc::new(Stmt::IfStmt{
         cond: c,
         stmt: s,
         else_stmt: None,
     }),
-    "if" "(" <c:Exp> ")" <s:StmtRestr<"">> <e:("else" <StmtRestr<I>>)> => Rc::new(AstNode::IfStmt{
+    "if" "(" <c:Exp> ")" <s:StmtRestr<"">> <e:("else" <StmtRestr<I>>)> => Rc::new(Stmt::IfStmt{
         cond: c,
         stmt: s,
         else_stmt: Some(e),
@@ -102,20 +94,20 @@ Exps = List<Exp>;
 
 // lowest-precedence expressions
 // see Term for highest prec., -Op rules for other precedences
-Exp: Rc<AstNode> = {
+Exp: Rc<Exp> = {
     Assignment,
     BinOp,
 };
 
-Assignment: Rc<AstNode> = {
-    <v:VarId> "=" <e:Exp> => Rc::new(AstNode::Assign{
+Assignment: Rc<Exp> = {
+    <v:VarId> "=" <e:Exp> => Rc::new(Exp::Assign{
         varid: v,
         exp: e,
     }),
 };
 
 // all binary operations excluding casts and assignments
-BinOp: Rc<AstNode> = {
+BinOp: Rc<Exp> = {
     // logic operations are lower-precedence than arithmetic, so check those first
     LogicOps
 };
@@ -155,48 +147,46 @@ FactorOp: BOp = {
 ArithFactor = Tier<FactorOp, TypeCast>;
 
 // Expressions that need to be parsed first (including high-precedence ops, literals, etc.)
-Term: Rc<AstNode> = {
+Term: Rc<Exp> = {
     "(" <Exp> ")",
     Literal,
-    <v:VarId> => Rc::new(AstNode::VarVal{
-        var: v,
-    }),
+    <v:VarId> => Rc::new(Exp::VarVal(v)),
     FuncCall,
 };
 
 // Needed to put these in the precedence chain somewhere, arbitrarily decided
-TypeCast: Rc<AstNode> = {
-    "[" <t:Type> "]" <e:TypeCast> => Rc::new(AstNode::Cast{
+TypeCast: Rc<Exp> = {
+    "[" <t:Type> "]" <e:TypeCast> => Rc::new(Exp::Cast{
         type_: t,
         exp: e,
     }),
     UOp,
 };
 
-UOp: Rc<AstNode> = {
-    "!" <e:UOp> => Rc::new(AstNode::UnaryOp{
+UOp: Rc<Exp> = {
+    "!" <e:UOp> => Rc::new(Exp::UnaryOp{
         op: UOp::BitwiseNeg,
         exp: e,
     }),
-    "-" <e:UOp> => Rc::new(AstNode::UnaryOp{
+    "-" <e:UOp> => Rc::new(Exp::UnaryOp{
         op: UOp::SignedNeg,
         exp: e,
     }),
     Term,
 };
 
-Literal: Rc<AstNode> = {
-    "true"  => Rc::new(AstNode::Literal{ lit: Lit::LitTrue }),
-    "false" => Rc::new(AstNode::Literal{ lit: Lit::LitFalse }),
+Literal: Rc<Exp> = {
+    "true"  => Rc::new(Exp::Literal(Lit::LitBool(true))),
+    "false" => Rc::new(Exp::Literal(Lit::LitBool(false))),
     <i:r"[0-9]+"> <f:r"\.[0-9]+"?> => match f {
-        None => Rc::new(AstNode::Literal{ lit: Lit::LitInt(i32::from_str(i).unwrap()) }),
-        Some(f) => Rc::new(AstNode::Literal { lit: Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()) }),
+        None => Rc::new(Exp::Literal(Lit::LitInt(i32::from_str(i).unwrap()))),
+        Some(f) => Rc::new(Exp::Literal(Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()))),
     }
 };
 
 
-FuncCall: Rc<AstNode> = {
-    <g:GlobId> "(" <e:Exps?> ")" => Rc::new(AstNode::FuncCall{
+FuncCall: Rc<Exp> = {
+    <g:GlobId> "(" <e:Exps?> ")" => Rc::new(Exp::FuncCall{
         globid: g,
         exps: e,
     }),
@@ -241,8 +231,8 @@ TDecls: Vec<Box<Type>> = {
 
 VDecls = List<VDecl>;
 
-VDecl: Rc<AstNode> = {
-    <t:Type> <i:VarId> => Rc::new(AstNode::VDecl{
+VDecl: Rc<VDecl> = {
+    <t:Type> <i:VarId> => Rc::new(VDecl{
         type_: t,
         varid: i,
     })
