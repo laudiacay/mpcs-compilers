@@ -3,6 +3,8 @@
 
 to install cargo and rustc (for compilation and running): run this script https://rustup.rs/
 
-to build the code run `cargo build --release`
+to build the code run `make`
 
-to run the binary target, run `cargo run --release -- ARGS`, where ARGS is what you want to pass to ekcc
+to run the binary target, run `./target/ekcc ARGS`, where ARGS is what you want to pass to ekcc
+
+to clean run `make clean`
