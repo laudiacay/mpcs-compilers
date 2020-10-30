@@ -4,6 +4,7 @@ extern crate lalrpop;
 #[macro_use]
 extern crate lalrpop_util;
 mod ast;
+mod typecheck;
 
 use clap::{App, Arg};
 //use pest::Parser;
@@ -38,28 +39,33 @@ fn main() {
             .expect(&format!("failed to create output file at {}", output_file).to_string());
         serde_yaml::to_writer(file, &prog).expect("failed to write ast to file");
     }
+
+    unimplemented!("need to call the typechecker!");
 }
 
 #[cfg(test)]
 mod tests {
     use crate::kaleidoscope::ProgParser;
+    use crate::typecheck::typecheck;
     use std::fs::read_to_string;
-    #[test]
-    fn can_parse_and_serialize_test1() {
-        let file_contents_str = read_to_string("test/test1.ek").unwrap();
+
+    fn test_file(filename: &str) {
+        let file_contents_str = read_to_string(filename).unwrap();
         let prog = ProgParser::new().parse(&file_contents_str).unwrap();
         println!(
-            "yaml representation of test1.ek:\n{:?}",
+            "yaml representation of {}:\n{:?}",
+            filename,
             serde_yaml::to_string(&prog).unwrap()
         );
+        let typed_prog = typecheck(prog).unwrap();
+        println!("typechecked AST: {:#?}", typed_prog);
     }
     #[test]
-    fn can_parse_and_serialize_test2() {
-        let file_contents_str = read_to_string("test/test2.ek").unwrap();
-        let prog = ProgParser::new().parse(&file_contents_str).unwrap();
-        println!(
-            "yaml representation of test2.ek:\n{:?}",
-            serde_yaml::to_string(&prog).unwrap()
-        );
+    fn can_parse_serialize_typecheck_test1() {
+        test_file("test/test1.ek");
+    }
+    #[test]
+    fn can_parse_serialize_typecheck_test2() {
+        test_file("test/test2.ek");
     }
 }

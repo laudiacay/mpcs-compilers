@@ -37,7 +37,7 @@ Extern: Extern = {
     "extern" <t:Type> <gid:GlobId> "(" <tds:TDecls?> ")" ";" => Extern{
         type_: t,
         globid: gid,
-        tdecls: tds,
+        args    : tds,
     }
 };
 
@@ -45,7 +45,7 @@ Func: Func = {
     "def" <t:Type> <gid:GlobId> "(" <vs:(VDecls)?> ")" <b:Blk> => Func{
         type_: t,
         globid: gid,
-        vdecls: vs,
+        args: vs,
         blk: b,
     }
 };
@@ -64,7 +64,7 @@ StmtRestr<I>: Rc<Stmt> = {
     <b:Blk> => Rc::new(Stmt::Blk(b)),
     "return" <e:(Exp)?> ";" => Rc::new(Stmt::ReturnStmt(e)),
     <v:VDecl> "=" <e:Exp> ";" => Rc::new(Stmt::VDeclStmt{
-        vdecl: v,
+        vdecl: Rc::new(v),
         exp: e,
     }),
     <e:Exp> ";" => Rc::new(Stmt::ExpStmt(e)),
@@ -208,20 +208,20 @@ GlobId: String = {
     Ident
 };
 
-Type: Box<Type> = {
-    "int"   => Box::new(Type::IntType),
-    "cint"  => Box::new(Type::CIntType),
-    "float" => Box::new(Type::FloatType),
-    "bool"  => Box::new(Type::BoolType),
-    "void"  => Box::new(Type::VoidType),
+Type: Type = {
+    "int"   => Type::IntType,
+    "cint"  => Type::CIntType,
+    "float" => Type::FloatType,
+    "bool"  => Type::BoolType,
+    "void"  => Type::VoidType,
     <na:"noalias"?> "ref" <t:Type> => match na {
-        None    => Box::new(Type::Ref(false, t)),
-        Some(_) => Box::new(Type::Ref(true, t)),
+        None    => Type::Ref(false, Box::new(t)),
+        Some(_) => Type::Ref(true, Box::new(t)),
     }
 };
 
 // TDecls = List<Type>;
-TDecls: Vec<Box<Type>> = {
+TDecls: Vec<Type> = {
     <ds:(<Type> ",")*> <d:Type> => {
         let mut ds = ds;
         ds.push(d);
@@ -231,12 +231,12 @@ TDecls: Vec<Box<Type>> = {
 
 VDecls = List<VDecl>;
 
-VDecl: Rc<VDecl> = {
-    <t:Type> <i:VarId> => Rc::new(VDecl{
+VDecl: VDecl = {
+    <t:Type> <i:VarId> => VDecl{
         type_: t,
         varid: i,
-    })
-}
+    }
+    }
 
 // uh I think this ignores comments
 match {

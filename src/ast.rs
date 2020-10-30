@@ -11,16 +11,16 @@ pub struct Prog {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Extern {
-    pub type_: Box<Type>,
+    pub type_: Type,
     pub globid: String,
-    pub tdecls: Option<Vec<Box<Type>>>,
+    pub args: Option<Vec<Type>>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Func {
-    pub type_: Box<Type>,
+    pub type_: Type,
     pub globid: String,
-    pub vdecls: Option<Vec<Rc<VDecl>>>,
+    pub args: Option<Vec<VDecl>>,
     pub blk: Block,
 }
 
@@ -35,8 +35,8 @@ pub struct Block {
  */
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Stmt {
-    Blk (Block),
-    ReturnStmt (Option<Rc<Exp>>),
+    Blk(Block),
+    ReturnStmt(Option<Rc<Exp>>),
     VDeclStmt {
         vdecl: Rc<VDecl>,
         exp: Rc<Exp>,
@@ -52,7 +52,7 @@ pub enum Stmt {
         else_stmt: Option<Rc<Stmt>>,
     },
     PrintStmt(Rc<Exp>),
-    PrintStmtSlit(String)
+    PrintStmtSlit(String),
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -62,7 +62,7 @@ pub enum Exp {
         exp: Rc<Exp>,
     },
     Cast {
-        type_: Box<Type>,
+        type_: Type,
         exp: Rc<Exp>,
     },
     BinOp {
@@ -82,9 +82,9 @@ pub enum Exp {
     },
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub struct VDecl {
-    pub type_: Box<Type>,
+    pub type_: Type,
     pub varid: String,
 }
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
@@ -94,7 +94,7 @@ pub enum Lit {
     LitFloat(f64),
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum Type {
     IntType,
     CIntType,
