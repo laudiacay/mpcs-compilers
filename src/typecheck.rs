@@ -103,61 +103,99 @@ fn typecheck_block(
     let mut tc_stmts = vec![];
     if let Some(stmts) = blk.stmts {
         for stmt in stmts {
-            let new_stmt = match *stmt {
-                Stmt::Blk(b) => TCStmt::Blk(typecheck_block(
-                    b,
-                    &defined_functions,
-                    defined_vars.clone(),
-                    should_return.clone(),
-                )?),
-                Stmt::ReturnStmt(exp) => match (exp, should_return.clone()) {
-                    (None, None) => TCStmt::ReturnStmt(None),
-                    (Some(exp), Some(should_return)) => {
-                        let tcexp = typecheck_exp(exp, defined_functions, &defined_vars)?;
-                        if tcexp.type_ != should_return {
-                            Err(anyhow!("function returns incorrect type"))?
-                        } else {
-                            TCStmt::ReturnStmt(Some(tcexp))
-                        }
-                    }
-                    _ => Err(anyhow!("function returns incorrect type"))?,
-                },
-                Stmt::VDeclStmt { vdecl, exp } => {
-                    let vdecl: TCVDecl = vdecl.try_into()?;
-                    let exp = typecheck_exp(exp, defined_functions, &defined_vars)?;
-                    if let TCType::Ref(b,pointer_type) = vdecl.type_ {
-                        if let TCExp::VarVal(_) = exp.exp {
-                            if exp.type_ != TCType::AtomType(pointer_type) {
-                                Err(anyhow!("reference type does not match type of right-hand side of declaration"))?
-                            } 
-                        }
-                        else {
-                            Err(anyhow!(""))?
-                        }
-                    } else {
-                        if exp.type_ != vdecl.type_ {
-                            Err(anyhow!("variable declaration assigns to wrong type"))?
-                        } 
-                    }
-                    if let Some(_) = defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
-                        Err(anyhow!("duplicate variable definition"))?;
-                    }
-                    TCStmt::VDeclStmt { vdecl, exp }
-                },
-                Stmt::ExpStmt(exp) => TCStmt::ExpStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
-                Stmt::WhileStmt { cond, stmt } => unimplemented!(""),
-                Stmt::IfStmt {
-                    cond,
-                    stmt,
-                    else_stmt,
-                } => unimplemented!(""),
-                Stmt::PrintStmt(exp) => TCStmt::PrintStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
-                Stmt::PrintStmtSlit(stri) => TCStmt::PrintStmtSlit(stri),
-            };
+            let new_stmt = typecheck_stmt(*stmt, defined_functions, &mut defined_vars, should_return.clone())?;
             tc_stmts.push(new_stmt);
         }
     }
     Ok(TCBlock { stmts: tc_stmts })
+}
+
+fn typecheck_stmt(
+    stmt: Stmt,
+    defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
+    defined_vars: &mut HashMap<String, TCType>, // idk what to do with the muts and the &s tbh
+    should_return: Option<TCType>,
+) -> Result<TCStmt> {
+    let new_stmt = match stmt {
+        Stmt::Blk(b) => TCStmt::Blk(typecheck_block(
+            b,
+            &defined_functions,
+            defined_vars.clone(),
+            should_return.clone(),
+        )?),
+        Stmt::ReturnStmt(exp) => match (exp, should_return.clone()) {
+            (None, None) => TCStmt::ReturnStmt(None),
+            (Some(exp), Some(should_return)) => {
+                let tcexp = typecheck_exp(exp, defined_functions, &defined_vars)?;
+                if tcexp.type_ != should_return {
+                    Err(anyhow!("function returns incorrect type"))?
+                } else {
+                    TCStmt::ReturnStmt(Some(tcexp))
+                }
+            }
+            _ => Err(anyhow!("function returns incorrect type"))?,
+        },
+        Stmt::VDeclStmt { vdecl, exp } => {
+            let vdecl: TCVDecl = vdecl.try_into()?;
+            let exp = typecheck_exp(exp, defined_functions, &defined_vars)?;
+            if let TCType::Ref(b,pointer_type) = vdecl.type_ {
+                if let TCExp::VarVal(_) = exp.exp {
+                    if exp.type_ != TCType::AtomType(pointer_type) {
+                        Err(anyhow!("reference type does not match type of right-hand side of declaration"))?
+                    } 
+                }
+                else {
+                    Err(anyhow!(""))?
+                }
+            } else {
+                if exp.type_ != vdecl.type_ {
+                    Err(anyhow!("variable declaration assigns to wrong type"))?
+                } 
+            }
+            if let Some(_) = defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
+                Err(anyhow!("duplicate variable definition"))?;
+            }
+            TCStmt::VDeclStmt { vdecl, exp }
+        },
+        Stmt::ExpStmt(exp) => TCStmt::ExpStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
+        Stmt::WhileStmt { cond, stmt } => {
+            let cond = typecheck_exp(cond, defined_functions, &defined_vars)?;
+            let new_stmt = typecheck_stmt(*stmt, defined_functions, &mut defined_vars.clone(), should_return.clone())?;
+
+            // check that the condition is actually a bool. unsure if this is necessary.
+            if let TCType::AtomType(TCAtomType::BoolType) = cond.type_ {
+                TCStmt::WhileStmt { cond, stmt: Box::new(new_stmt)  }
+            } else {
+                Err(anyhow!("non-boolean expression in while loop condition"))?
+            }
+        },
+        Stmt::IfStmt {
+            cond,
+            stmt,
+            else_stmt,
+        } => {
+            let cond = typecheck_exp(cond, defined_functions, &defined_vars)?;
+            let new_stmt = typecheck_stmt(*stmt, defined_functions, &mut defined_vars.clone(), should_return.clone())?;
+
+            if let TCType::AtomType(TCAtomType::BoolType) = cond.type_ {
+                if let Some(else_stmt) = else_stmt {
+                    let new_else_stmt = typecheck_stmt(*else_stmt, defined_functions, &mut defined_vars.clone(), should_return.clone())?;
+                    TCStmt::IfStmt { cond, 
+                                     stmt: Box::new(new_stmt), 
+                                     else_stmt: Some(Box::new(new_else_stmt))  }
+                } else {
+                    TCStmt::IfStmt { cond, 
+                                     stmt: Box::new(new_stmt), 
+                                     else_stmt: None }
+                }
+            } else {
+                Err(anyhow!("non-boolean expression in while loop condition"))?
+            }
+        },
+        Stmt::PrintStmt(exp) => TCStmt::PrintStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
+        Stmt::PrintStmtSlit(stri) => TCStmt::PrintStmtSlit(stri),
+    };
+    Ok(new_stmt)
 }
 
 #[derive(Debug, PartialEq)]
