@@ -236,7 +236,32 @@ fn typecheck_exp(
                 None => Err(anyhow!("assign statement to undeclared variable"))?
             }
         },
-        Exp::Cast { type_, exp } => unimplemented!("OwO"),
+        Exp::Cast { type_: cast_type, exp: casted_exp } => {
+            let cast_type: TCType = cast_type.try_into()?;
+            let new_exp = typecheck_exp(*casted_exp, defined_functions, defined_vars)?;
+            match new_exp.type_ {
+                TCType::AtomType(TCAtomType::IntType)
+                | TCType::AtomType(TCAtomType::CIntType)
+                | TCType::AtomType(TCAtomType::FloatType)
+                    => { match cast_type {
+                            TCType::AtomType(TCAtomType::IntType)
+                            | TCType::AtomType(TCAtomType::CIntType)
+                            | TCType::AtomType(TCAtomType::FloatType)
+                                => Ok(TypedExp {type_: cast_type, exp: new_exp.exp } ),
+                            _ => Err(anyhow!("illegal type cast (num to non-num)"))?
+                        }
+                    },
+                TCType::AtomType(TCAtomType::BoolType) => {
+                    if let TCType::AtomType(TCAtomType::BoolType) = cast_type {
+                        Ok(TypedExp {type_: cast_type, exp: new_exp.exp } )
+                    } else {
+                        Err(anyhow!("illegal type cast (bool to non-bool)"))?
+                    }
+                }
+                _ => Err(anyhow!("illegal type cast (refs or something)"))?
+            }
+            // TODO wtf are ref types
+        },
         Exp::BinOp { op, lhs, rhs } => unimplemented!("OwO"),
         Exp::UnaryOp { op, exp } => unimplemented!("OwO"),
         Exp::Literal(lit) => unimplemented!("OwO"),
