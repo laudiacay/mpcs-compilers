@@ -217,11 +217,33 @@ pub enum TCExp {
 }
 
 fn typecheck_exp(
-    _exp: Exp,
-    _defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
-    _defined_vars: &HashMap<String, TCType>,
+    exp: Exp,
+    defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
+    defined_vars: &HashMap<String, TCType>,
 ) -> Result<TypedExp> {
-    Err(anyhow!("unimplemented uwu"))
+    match exp {
+        Exp::Assign { varid, exp: assignment_exp } => {
+            let assignment_exp = typecheck_exp(*assignment_exp, defined_functions, defined_vars)?;
+            let vartype = defined_vars.get(&varid);
+            match vartype {
+                Some(type_) => {
+                    if *type_ != assignment_exp.type_ {
+                        Err(anyhow!("mismatched types in assign statement"))?
+                    }
+                    let new_exp = TCExp::Assign { varid, exp: Box::new(assignment_exp) };
+                    Ok(TypedExp{ type_: type_.clone(), exp: new_exp })
+                }
+                None => Err(anyhow!("assign statement to undeclared variable"))?
+            }
+        },
+        Exp::Cast { type_, exp } => unimplemented!("OwO"),
+        Exp::BinOp { op, lhs, rhs } => unimplemented!("OwO"),
+        Exp::UnaryOp { op, exp } => unimplemented!("OwO"),
+        Exp::Literal(lit) => unimplemented!("OwO"),
+        Exp::VarVal(varid) => unimplemented!("OwO"),
+        Exp::FuncCall{ globid, exps } => unimplemented!("OwO"),
+    }
+    //Err(anyhow!("unimplemented uwu"))
 }
 
 #[derive(Debug, PartialEq)]
