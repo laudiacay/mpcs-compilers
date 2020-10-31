@@ -89,7 +89,7 @@ pub struct TCBlock {
 fn typecheck_block(
     blk: Block,
     defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
-    defined_vars: HashMap<String, TCType>,
+    mut defined_vars: HashMap<String, TCType>, // idk what to do with the muts and the &s tbh
     should_return: Option<TCType>,
 ) -> Result<TCBlock> {
     /*    /*
@@ -99,6 +99,7 @@ fn typecheck_block(
 
     Also, for every expression, determine its type (applying the explicit cast rules from the language specification, and making sure Binops are the same type on both sides or a valid cast.  When printing the AST, the type of each expression should be part of the AST nodes for each expression.
      */*/
+
     let mut tc_stmts = vec![];
     if let Some(stmts) = blk.stmts {
         for stmt in stmts {
@@ -121,16 +122,26 @@ fn typecheck_block(
                     }
                     _ => Err(anyhow!("function returns incorrect type"))?,
                 },
-                Stmt::VDeclStmt { vdecl, exp } => unimplemented!(""),
-                Stmt::ExpStmt(exp) => unimplemented!(""),
+                Stmt::VDeclStmt { vdecl, exp } => {
+                    let vdecl: TCVDecl = vdecl.try_into()?;
+                    let exp = typecheck_exp(exp, defined_functions, &defined_vars)?;
+                    if exp.type_ != vdecl.type_ {
+                        Err(anyhow!("variable declaration assigns to wrong type"))?
+                    } 
+                    if let Some(_) = defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
+                        Err(anyhow!("duplicate variable definition"))?;
+                    }
+                    TCStmt::VDeclStmt { vdecl, exp }
+                },
+                Stmt::ExpStmt(exp) => TCStmt::ExpStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
                 Stmt::WhileStmt { cond, stmt } => unimplemented!(""),
                 Stmt::IfStmt {
                     cond,
                     stmt,
                     else_stmt,
                 } => unimplemented!(""),
-                Stmt::PrintStmt(exp) => unimplemented!(""),
-                Stmt::PrintStmtSlit(stri) => unimplemented!(""),
+                Stmt::PrintStmt(exp) => TCStmt::PrintStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
+                Stmt::PrintStmtSlit(stri) => TCStmt::PrintStmtSlit(stri),
             };
             tc_stmts.push(new_stmt);
         }
