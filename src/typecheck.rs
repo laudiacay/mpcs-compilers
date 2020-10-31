@@ -125,9 +125,20 @@ fn typecheck_block(
                 Stmt::VDeclStmt { vdecl, exp } => {
                     let vdecl: TCVDecl = vdecl.try_into()?;
                     let exp = typecheck_exp(exp, defined_functions, &defined_vars)?;
-                    if exp.type_ != vdecl.type_ {
-                        Err(anyhow!("variable declaration assigns to wrong type"))?
-                    } 
+                    if let TCType::Ref(b,pointer_type) = vdecl.type_ {
+                        if let TCExp::VarVal(_) = exp.exp {
+                            if exp.type_ != TCType::AtomType(pointer_type) {
+                                Err(anyhow!("reference type does not match type of right-hand side of declaration"))?
+                            } 
+                        }
+                        else {
+                            Err(anyhow!(""))?
+                        }
+                    } else {
+                        if exp.type_ != vdecl.type_ {
+                            Err(anyhow!("variable declaration assigns to wrong type"))?
+                        } 
+                    }
                     if let Some(_) = defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
                         Err(anyhow!("duplicate variable definition"))?;
                     }
