@@ -1,12 +1,11 @@
 use std::str::FromStr;
-use std::rc::Rc;
 use crate::ast::*;
 
 grammar;
 
 // macro for precedence climbing for binary operations
-Tier<Op,NextTier>: Rc<Exp> = {
-    <l:Tier<Op,NextTier>> <bop:Op> <r:NextTier> => Rc::new(Exp::BinOp{
+Tier<Op,NextTier>: Box<Exp> = {
+    <l:Tier<Op,NextTier>> <bop:Op> <r:NextTier> => Box::new(Exp::BinOp{
         op: bop,
         lhs: l,
         rhs: r,
@@ -54,37 +53,37 @@ Blk: Block = {
     "{" <s:(Stmts)?> "}" => Block{ stmts: s },
 };
 
-Stmts: Vec<Rc<Stmt>> = {
+Stmts: Vec<Box<Stmt>> = {
     <s:(Stmt)+> => s,
 };
 
 Stmt = StmtRestr<"I">;
 
-StmtRestr<I>: Rc<Stmt> = {
-    <b:Blk> => Rc::new(Stmt::Blk(b)),
-    "return" <e:(Exp)?> ";" => Rc::new(Stmt::ReturnStmt(e)),
-    <v:VDecl> "=" <e:Exp> ";" => Rc::new(Stmt::VDeclStmt{
-        vdecl: Rc::new(v),
-        exp: e,
+StmtRestr<I>: Box<Stmt> = {
+    <b:Blk> => Box::new(Stmt::Blk(b)),
+    "return" <e:(Exp)?> ";" => Box::new(Stmt::ReturnStmt(e.map(|x| *x))),
+    <v:VDecl> "=" <e:Exp> ";" => Box::new(Stmt::VDeclStmt{
+        vdecl: v,
+        exp: *e,
     }),
-    <e:Exp> ";" => Rc::new(Stmt::ExpStmt(e)),
-    "while" "(" <c:Exp> ")" <s:StmtRestr<I>> => Rc::new(Stmt::WhileStmt{
-        cond: c,
+    <e:Exp> ";" => Box::new(Stmt::ExpStmt(*e)),
+    "while" "(" <c:Exp> ")" <s:StmtRestr<I>> => Box::new(Stmt::WhileStmt{
+        cond: *c,
         stmt: s,
     }),
-    "print" <e:Exp> ";" => Rc::new(Stmt::PrintStmt(e)),
-    "print" <s:Slit> ";" => Rc::new(Stmt::PrintStmtSlit(s)),
+    "print" <e:Exp> ";" => Box::new(Stmt::PrintStmt(*e)),
+    "print" <s:Slit> ";" => Box::new(Stmt::PrintStmtSlit(s)),
     IfStmt<I>,
 };
 
-IfStmt<I>: Rc<Stmt> = {
-    "if" "(" <c:Exp> ")" <s:StmtRestr<"I">> if I != "" => Rc::new(Stmt::IfStmt{
-        cond: c,
+IfStmt<I>: Box<Stmt> = {
+    "if" "(" <c:Exp> ")" <s:StmtRestr<"I">> if I != "" => Box::new(Stmt::IfStmt{
+        cond: *c,
         stmt: s,
         else_stmt: None,
     }),
-    "if" "(" <c:Exp> ")" <s:StmtRestr<"">> <e:("else" <StmtRestr<I>>)> => Rc::new(Stmt::IfStmt{
-        cond: c,
+    "if" "(" <c:Exp> ")" <s:StmtRestr<"">> <e:("else" <StmtRestr<I>>)> => Box::new(Stmt::IfStmt{
+        cond: *c,
         stmt: s,
         else_stmt: Some(e),
     }),
@@ -94,20 +93,20 @@ Exps = List<Exp>;
 
 // lowest-precedence expressions
 // see Term for highest prec., -Op rules for other precedences
-Exp: Rc<Exp> = {
+Exp: Box<Exp> = {
     Assignment,
     BinOp,
 };
 
-Assignment: Rc<Exp> = {
-    <v:VarId> "=" <e:Exp> => Rc::new(Exp::Assign{
+Assignment: Box<Exp> = {
+    <v:VarId> "=" <e:Exp> => Box::new(Exp::Assign{
         varid: v,
         exp: e,
     }),
 };
 
 // all binary operations excluding casts and assignments
-BinOp: Rc<Exp> = {
+BinOp: Box<Exp> = {
     // logic operations are lower-precedence than arithmetic, so check those first
     LogicOps
 };
@@ -147,46 +146,46 @@ FactorOp: BOp = {
 ArithFactor = Tier<FactorOp, TypeCast>;
 
 // Expressions that need to be parsed first (including high-precedence ops, literals, etc.)
-Term: Rc<Exp> = {
+Term: Box<Exp> = {
     "(" <Exp> ")",
     Literal,
-    <v:VarId> => Rc::new(Exp::VarVal(v)),
+    <v:VarId> => Box::new(Exp::VarVal(v)),
     FuncCall,
 };
 
 // Needed to put these in the precedence chain somewhere, arbitrarily decided
-TypeCast: Rc<Exp> = {
-    "[" <t:Type> "]" <e:TypeCast> => Rc::new(Exp::Cast{
+TypeCast: Box<Exp> = {
+    "[" <t:Type> "]" <e:TypeCast> => Box::new(Exp::Cast{
         type_: t,
         exp: e,
     }),
     UOp,
 };
 
-UOp: Rc<Exp> = {
-    "!" <e:UOp> => Rc::new(Exp::UnaryOp{
+UOp: Box<Exp> = {
+    "!" <e:UOp> => Box::new(Exp::UnaryOp{
         op: UOp::BitwiseNeg,
         exp: e,
     }),
-    "-" <e:UOp> => Rc::new(Exp::UnaryOp{
+    "-" <e:UOp> => Box::new(Exp::UnaryOp{
         op: UOp::SignedNeg,
         exp: e,
     }),
     Term,
 };
 
-Literal: Rc<Exp> = {
-    "true"  => Rc::new(Exp::Literal(Lit::LitBool(true))),
-    "false" => Rc::new(Exp::Literal(Lit::LitBool(false))),
+Literal: Box<Exp> = {
+    "true"  => Box::new(Exp::Literal(Lit::LitBool(true))),
+    "false" => Box::new(Exp::Literal(Lit::LitBool(false))),
     <i:r"[0-9]+"> <f:r"\.[0-9]+"?> => match f {
-        None => Rc::new(Exp::Literal(Lit::LitInt(i32::from_str(i).unwrap()))),
-        Some(f) => Rc::new(Exp::Literal(Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()))),
+        None => Box::new(Exp::Literal(Lit::LitInt(i32::from_str(i).unwrap()))),
+        Some(f) => Box::new(Exp::Literal(Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()))),
     }
 };
 
 
-FuncCall: Rc<Exp> = {
-    <g:GlobId> "(" <e:Exps?> ")" => Rc::new(Exp::FuncCall{
+FuncCall: Box<Exp> = {
+    <g:GlobId> "(" <e:Exps?> ")" => Box::new(Exp::FuncCall{
         globid: g,
         exps: e,
     }),

@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 
-use crate::ast::{BOp, Extern, Func, Lit, Prog, Type, UOp, VDecl};
+use crate::ast::*;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
@@ -43,27 +43,99 @@ struct TCFunc {
 }
 
 fn typecheck_fn(
-    _fun: Func,
-    _defined_functions: &mut HashMap<String, (TCType, Vec<TCType>)>,
+    fun: Func,
+    defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
 ) -> Result<TCFunc> {
-    /*
-    In ​ <vdecl>​ , the type may not be void.
-    In ​ ref ​ <type>​ , the type may not be void or itself a reference type.
-    All functions must be declared and/or defined before they are used.
-    A function may not return a ref type.
-    The initialization expression for a reference variable (including function arguments) must be a variable.
-    All programs must define exactly one function named “run” which returns an integer (the
-    program exit status) and takes no arguments.
-    Errors should be a line starting with 'error: ' as specified in the compiler requirements.
+    // A function may not return a ref type.
+    if let Type::Ref(_, _) = fun.type_ {
+        return Err(anyhow!("functions cannot return ref types"));
+    }
 
-    Also, for every expression, determine its type (applying the explicit cast rules from the language specification, and making sure Binops are the same type on both sides or a valid cast.  When printing the AST, the type of each expression should be part of the AST nodes for each expression.
-     */
-    unimplemented!("typechecking fun not implemented");
+    let re_type: TCType = fun.type_.try_into()?;
+    let mut new_args = vec![];
+    let mut defined_vars: HashMap<String, TCType> = HashMap::new();
+    if let Some(args) = fun.args {
+        for arg in args.iter() {
+            let arg_new_type: TCType = arg.type_.clone().try_into()?;
+            if let Some(_) = defined_vars.insert(arg.varid.clone(), arg_new_type.clone()) {
+                return Err(anyhow!("two function arguments have the same name!"));
+            }
+            new_args.push(TCVDecl {
+                varid: arg.varid.clone(),
+                type_: arg_new_type,
+            });
+        }
+    }
+
+    let my_block = typecheck_block(
+        fun.blk,
+        defined_functions,
+        defined_vars,
+        Some(re_type.clone()),
+    )?;
+    Ok(TCFunc {
+        type_: re_type,
+        globid: fun.globid,
+        args: new_args,
+        blk: my_block,
+    })
 }
 
 #[derive(Debug, PartialEq)]
 pub struct TCBlock {
     pub stmts: Vec<TCStmt>,
+}
+
+fn typecheck_block(
+    blk: Block,
+    defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
+    defined_vars: HashMap<String, TCType>,
+    should_return: Option<TCType>,
+) -> Result<TCBlock> {
+    /*    /*
+    All functions must be declared and/or defined before they are used.
+    The initialization expression for a reference variable (including function arguments) must be a variable.
+    Errors should be a line starting with 'error: ' as specified in the compiler requirements.
+
+    Also, for every expression, determine its type (applying the explicit cast rules from the language specification, and making sure Binops are the same type on both sides or a valid cast.  When printing the AST, the type of each expression should be part of the AST nodes for each expression.
+     */*/
+    let mut tc_stmts = vec![];
+    if let Some(stmts) = blk.stmts {
+        for stmt in stmts {
+            let new_stmt = match *stmt {
+                Stmt::Blk(b) => TCStmt::Blk(typecheck_block(
+                    b,
+                    &defined_functions,
+                    defined_vars.clone(),
+                    should_return.clone(),
+                )?),
+                Stmt::ReturnStmt(exp) => match (exp, should_return.clone()) {
+                    (None, None) => TCStmt::ReturnStmt(None),
+                    (Some(exp), Some(should_return)) => {
+                        let tcexp = typecheck_exp(exp, defined_functions, &defined_vars)?;
+                        if tcexp.type_ != should_return {
+                            Err(anyhow!("function returns incorrect type"))?
+                        } else {
+                            TCStmt::ReturnStmt(Some(tcexp))
+                        }
+                    }
+                    _ => Err(anyhow!("function returns incorrect type"))?,
+                },
+                Stmt::VDeclStmt { vdecl, exp } => unimplemented!(""),
+                Stmt::ExpStmt(exp) => unimplemented!(""),
+                Stmt::WhileStmt { cond, stmt } => unimplemented!(""),
+                Stmt::IfStmt {
+                    cond,
+                    stmt,
+                    else_stmt,
+                } => unimplemented!(""),
+                Stmt::PrintStmt(exp) => unimplemented!(""),
+                Stmt::PrintStmtSlit(stri) => unimplemented!(""),
+            };
+            tc_stmts.push(new_stmt);
+        }
+    }
+    Ok(TCBlock { stmts: tc_stmts })
 }
 
 #[derive(Debug, PartialEq)]
@@ -91,7 +163,7 @@ pub enum TCStmt {
 #[derive(Debug, PartialEq)]
 pub struct TypedExp {
     // ifs and whiles have no type- representing unit as none
-    type_: Option<TCType>,
+    type_: TCType,
     exp: TCExp,
 }
 
@@ -122,23 +194,40 @@ pub enum TCExp {
     },
 }
 
+fn typecheck_exp(
+    _exp: Exp,
+    _defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
+    _defined_vars: &HashMap<String, TCType>,
+) -> Result<TypedExp> {
+    Err(anyhow!("unimplemented uwu"))
+}
+
 #[derive(Debug, PartialEq)]
 pub struct TCVDecl {
-    pub type_: Box<TCType>,
+    pub type_: TCType,
     pub varid: String,
 }
 
 #[derive(Debug, PartialEq, Clone)]
 pub enum TCType {
     AtomType(TCAtomType),
+    VoidType,
     Ref(bool, TCAtomType), // noalias, type
 }
 
-impl TryFrom<VDecl> for TCType {
+impl TryFrom<VDecl> for TCVDecl {
     type Error = anyhow::Error;
 
     fn try_from(t: VDecl) -> Result<Self, Self::Error> {
-        t.type_.try_into()
+        let type_ = t.type_.try_into()?;
+        if let TCType::VoidType = type_ {
+            Err(anyhow!("VDecl cannot be an atomtype"))
+        } else {
+            Ok(TCVDecl {
+                type_,
+                varid: t.varid,
+            })
+        }
     }
 }
 
@@ -160,7 +249,6 @@ pub enum TCAtomType {
     CIntType,
     FloatType,
     BoolType,
-    VoidType,
 }
 
 impl TryFrom<Type> for TCAtomType {
@@ -172,7 +260,7 @@ impl TryFrom<Type> for TCAtomType {
             Type::CIntType => Ok(TCAtomType::CIntType),
             Type::FloatType => Ok(TCAtomType::FloatType),
             Type::BoolType => Ok(TCAtomType::BoolType),
-            Type::VoidType => Ok(TCAtomType::VoidType),
+            Type::VoidType => Err(anyhow!("void type can't go here :(")),
             Type::Ref(_, _) => Err(anyhow!("tried to convert ref type to atom type")),
         }
     }
@@ -201,7 +289,10 @@ pub fn typecheck(prog: Prog) -> Result<TCProg> {
                     .as_ref()
                     .unwrap_or(&vec![])
                     .iter()
-                    .map(|x| x.clone().try_into())
+                    .map(|x| {
+                        let tcv: Result<TCVDecl> = x.clone().try_into();
+                        tcv.map(|x| x.type_)
+                    })
                     .collect::<Result<Vec<TCType>>>()?,
             ),
         ) {
@@ -209,9 +300,12 @@ pub fn typecheck(prog: Prog) -> Result<TCProg> {
         }
         tcprog_funcs.push(typecheck_fn(f, &mut fn_name_to_type)?);
     }
-    unimplemented!("need to do... everything else?");
-    Ok(TCProg {
-        externs: tcprog_externs,
-        funcs: tcprog_funcs,
-    })
+    //    All programs must define exactly one function named “run” which returns an integer (the
+    // program exit status) and takes no arguments.
+
+    panic!();
+    //Ok(TCProg {
+    //    externs: tcprog_externs,
+    //    funcs: tcprog_funcs,
+    //})
 }

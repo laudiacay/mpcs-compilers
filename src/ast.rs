@@ -1,7 +1,5 @@
 use serde::{Deserialize, Serialize};
 
-use std::rc::Rc;
-
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 #[serde(tag = "prog")]
 pub struct Prog {
@@ -26,7 +24,7 @@ pub struct Func {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct Block {
-    pub stmts: Option<Vec<Rc<Stmt>>>,
+    pub stmts: Option<Vec<Box<Stmt>>>,
 }
 
 /*
@@ -36,22 +34,22 @@ pub struct Block {
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum Stmt {
     Blk(Block),
-    ReturnStmt(Option<Rc<Exp>>),
+    ReturnStmt(Option<Exp>),
     VDeclStmt {
-        vdecl: Rc<VDecl>,
-        exp: Rc<Exp>,
+        vdecl: VDecl,
+        exp: Exp,
     },
-    ExpStmt(Rc<Exp>),
+    ExpStmt(Exp),
     WhileStmt {
-        cond: Rc<Exp>,
-        stmt: Rc<Stmt>,
+        cond: Exp,
+        stmt: Box<Stmt>,
     },
     IfStmt {
-        cond: Rc<Exp>,
-        stmt: Rc<Stmt>,
-        else_stmt: Option<Rc<Stmt>>,
+        cond: Exp,
+        stmt: Box<Stmt>,
+        else_stmt: Option<Box<Stmt>>,
     },
-    PrintStmt(Rc<Exp>),
+    PrintStmt(Exp),
     PrintStmtSlit(String),
 }
 
@@ -59,26 +57,26 @@ pub enum Stmt {
 pub enum Exp {
     Assign {
         varid: String,
-        exp: Rc<Exp>,
+        exp: Box<Exp>,
     },
     Cast {
         type_: Type,
-        exp: Rc<Exp>,
+        exp: Box<Exp>,
     },
     BinOp {
         op: BOp,
-        lhs: Rc<Exp>,
-        rhs: Rc<Exp>,
+        lhs: Box<Exp>,
+        rhs: Box<Exp>,
     },
     UnaryOp {
         op: UOp,
-        exp: Rc<Exp>,
+        exp: Box<Exp>,
     },
     Literal(Lit),
     VarVal(String),
     FuncCall {
         globid: String,
-        exps: Option<Vec<Rc<Exp>>>,
+        exps: Option<Vec<Box<Exp>>>,
     },
 }
 
