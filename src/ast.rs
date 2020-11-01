@@ -103,7 +103,7 @@ pub enum Type {
 }
 
 //binary operators
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum BOp {
     //    Equals, // = treated separately from other binops
     Mult, // *
@@ -117,7 +117,7 @@ pub enum BOp {
     Or,   // ||
 }
 
-#[derive(Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize)]
 pub enum UOp {
     BitwiseNeg, // !
     SignedNeg,  // -

@@ -1,0 +1,39 @@
+---
+prog: Prog
+externs: []
+funcs:
+  - type_: IntType
+    globid: run
+    vdecls: ~
+    blk:
+      stmts:
+        - ExpStmt:
+            Assign:
+              varid: x
+              exp:
+                Assign:
+                  varid: y
+                  exp:
+                    Literal:
+                      LitInt: 4
+        - ReturnStmt:
+            BinOp:
+              op: Add
+              lhs:
+                BinOp:
+                  op: Add
+                  lhs:
+                    Literal:
+                      LitInt: 1
+                  rhs:
+                    Literal:
+                      LitInt: 2
+              rhs:
+                BinOp:
+                  op: Mult
+                  lhs:
+                    Literal:
+                      LitInt: 3
+                  rhs:
+                    Literal:
+                      LitInt: 4

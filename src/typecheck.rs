@@ -277,6 +277,9 @@ fn typecheck_exp(
         Exp::Cast { type_: cast_type, exp: casted_exp } => {
             let cast_type: TCType = cast_type.try_into()?;
             let new_exp = typecheck_exp(*casted_exp, defined_functions, defined_vars)?;
+
+            // checking for legal casts
+            // god this is so ugly
             match new_exp.type_ {
                 TCType::AtomType(TCAtomType::IntType)
                 | TCType::AtomType(TCAtomType::CIntType)
@@ -298,15 +301,115 @@ fn typecheck_exp(
                 }
                 _ => Err(anyhow!("illegal type cast (refs or something)"))?
             }
-            // TODO wtf are ref types
         },
-        Exp::BinOp { op, lhs, rhs } => unimplemented!("OwO"),
-        Exp::UnaryOp { op, exp } => unimplemented!("OwO"),
-        Exp::Literal(lit) => unimplemented!("OwO"),
-        Exp::VarVal(varid) => unimplemented!("OwO"),
-        Exp::FuncCall{ globid, exps } => unimplemented!("OwO"),
+        Exp::BinOp { op, lhs, rhs } => {
+            let lhs = typecheck_exp(*lhs, defined_functions, defined_vars)?;
+            let rhs = typecheck_exp(*rhs, defined_functions, defined_vars)?;
+            
+            if lhs.type_ != rhs.type_ {  // implicit casts NOT supported, per the spec
+                Err(anyhow!("mismatched types in binary expression"))?
+            }
+
+            // if I move the new_exp definition out here the borrow checker yells at me :(
+            match op {
+                BOp::Mult | BOp::Div | BOp::Add | BOp::Sub =>  {
+                    match lhs.type_ {
+                        TCType::AtomType(TCAtomType::IntType)
+                        | TCType::AtomType(TCAtomType::CIntType)
+                        | TCType::AtomType(TCAtomType::FloatType)
+                            => {
+                                let type_ = lhs.type_.clone();
+                                let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                                Ok(TypedExp { type_, exp: new_exp })
+                            }
+                        _ => Err(anyhow!("arithmetic operation on non-num types"))?
+                    }
+                },
+                BOp::EqTo => {
+                    let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                    Ok(TypedExp { type_: TCType::AtomType(TCAtomType::BoolType), exp: new_exp })
+                },
+                BOp::Gt | BOp::Lt => {
+                    match lhs.type_ {
+                        TCType::AtomType(TCAtomType::IntType)
+                        | TCType::AtomType(TCAtomType::CIntType)
+                        | TCType::AtomType(TCAtomType::FloatType)
+                            => {
+                                let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                                Ok(TypedExp { type_: TCType::AtomType(TCAtomType::BoolType), exp: new_exp })
+                            }
+                        _ => Err(anyhow!("comparison between non-num types"))?
+                    }
+                },
+                BOp::And | BOp::Or => {
+                    if let TCType::AtomType(TCAtomType::BoolType) = lhs.type_ {
+                        let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
+                        Ok(TypedExp { type_: TCType::AtomType(TCAtomType::BoolType), exp: new_exp })
+                    } else {
+                        Err(anyhow!("boolean operation on non-boolean types"))?
+                    }
+                },
+            }
+
+        },
+        Exp::UnaryOp { op, exp } => {
+            let exp = typecheck_exp(*exp, defined_functions, defined_vars)?;
+            match (op.clone(), exp.type_.clone()) {
+                (UOp::BitwiseNeg, TCType::AtomType(TCAtomType::BoolType)) => {
+                    let tcexp = TCExp::UnaryOp{ op, exp: Box::new(exp) };
+                    Ok(TypedExp{ type_: TCType::AtomType(TCAtomType::BoolType), exp: tcexp })
+                },
+                (UOp::SignedNeg, TCType::AtomType(TCAtomType::IntType)) 
+                | (UOp::SignedNeg, TCType::AtomType(TCAtomType::CIntType)) 
+                | (UOp::SignedNeg, TCType::AtomType(TCAtomType::FloatType)) 
+                    => {
+                        let type_ = exp.type_.clone();
+                        let tcexp = TCExp::UnaryOp{ op, exp: Box::new(exp) };
+                        Ok(TypedExp{ type_, exp: tcexp })
+                    },
+                _ => Err(anyhow!("illegal type in unary expression"))?
+            }
+        },
+        Exp::Literal(lit) => {
+            match lit {
+                Lit::LitBool(b) => {
+                    let type_ = TCType::AtomType(TCAtomType::BoolType);
+                    Ok(TypedExp{ type_, exp: TCExp::Literal(lit) })
+                },
+                Lit::LitInt(i) => {
+                    // cints not supported yet
+                    let type_ = TCType::AtomType(TCAtomType::IntType);
+                    Ok(TypedExp{ type_, exp: TCExp::Literal(lit) })
+                },
+                Lit::LitFloat(f) => {
+                    let type_ = TCType::AtomType(TCAtomType::FloatType);
+                    Ok(TypedExp{ type_, exp: TCExp::Literal(lit) })
+                }
+            }
+        },
+        Exp::VarVal(varid) => {
+            let vartype = defined_vars.get(&varid);
+            match vartype {
+                None => Err(anyhow!("variable not defined"))?,
+                Some(TCType::Ref(noalias, atype)) => {
+                    // treat ref types within expressions as though they're the actual type
+                    // handle dereferencing, uh, later
+                    Ok(TypedExp { type_: TCType::AtomType(atype.clone()), exp: TCExp::VarVal(varid) })
+                }
+                Some(atype) => {
+                    Ok(TypedExp { type_: atype.clone(), exp: TCExp::VarVal(varid) })
+                }
+            }
+        },
+        Exp::FuncCall{ globid, exps } => {
+            // check that function is in defined_functions
+            // if it is, grab the types of each of its arguments, typecheck the corresponding exp
+            // in exps, and make sure the types match
+            // but if the function signature has a ref type, the exp in exps corresponding to that
+            // argument needs to be a VarVal with a matching type
+            unimplemented!("UnU")
+        },
     }
-    //Err(anyhow!("unimplemented uwu"))
 }
 
 #[derive(Debug, PartialEq)]
