@@ -52,11 +52,6 @@ mod tests {
     fn test_file(filename: &str) {
         let file_contents_str = read_to_string(filename).unwrap();
         let prog = ProgParser::new().parse(&file_contents_str).unwrap();
-        println!(
-            "yaml representation of {}:\n{:?}",
-            filename,
-            serde_yaml::to_string(&prog).unwrap()
-        );
         let typed_prog = typecheck(prog).unwrap();
         println!("typechecked AST: {:#?}", typed_prog);
     }

@@ -103,7 +103,12 @@ fn typecheck_block(
     let mut tc_stmts = vec![];
     if let Some(stmts) = blk.stmts {
         for stmt in stmts {
-            let new_stmt = typecheck_stmt(*stmt, defined_functions, &mut defined_vars, should_return.clone())?;
+            let new_stmt = typecheck_stmt(
+                *stmt,
+                defined_functions,
+                &mut defined_vars,
+                should_return.clone(),
+            )?;
             tc_stmts.push(new_stmt);
         }
     }
@@ -138,61 +143,88 @@ fn typecheck_stmt(
         Stmt::VDeclStmt { vdecl, exp } => {
             let vdecl: TCVDecl = vdecl.try_into()?;
             let exp = typecheck_exp(exp, defined_functions, &defined_vars)?;
-            if let TCType::Ref(b,pointer_type) = vdecl.type_ {
+            if let TCType::Ref(_, pointer_type) = vdecl.type_ {
                 if let TCExp::VarVal(_) = exp.exp {
                     if exp.type_ != TCType::AtomType(pointer_type) {
-                        Err(anyhow!("reference type does not match type of right-hand side of declaration"))?
-                    } 
-                }
-                else {
+                        Err(anyhow!(
+                            "reference type does not match type of right-hand side of declaration"
+                        ))?
+                    }
+                } else {
                     Err(anyhow!(""))?
                 }
             } else {
                 if exp.type_ != vdecl.type_ {
                     Err(anyhow!("variable declaration assigns to wrong type"))?
-                } 
+                }
             }
             if let Some(_) = defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
                 Err(anyhow!("duplicate variable definition"))?;
             }
             TCStmt::VDeclStmt { vdecl, exp }
-        },
-        Stmt::ExpStmt(exp) => TCStmt::ExpStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
+        }
+        Stmt::ExpStmt(exp) => {
+            TCStmt::ExpStmt(typecheck_exp(exp, defined_functions, &defined_vars)?)
+        }
         Stmt::WhileStmt { cond, stmt } => {
             let cond = typecheck_exp(cond, defined_functions, &defined_vars)?;
-            let new_stmt = typecheck_stmt(*stmt, defined_functions, &mut defined_vars.clone(), should_return.clone())?;
+            let new_stmt = typecheck_stmt(
+                *stmt,
+                defined_functions,
+                &mut defined_vars.clone(),
+                should_return.clone(),
+            )?;
 
             // check that the condition is actually a bool. unsure if this is necessary.
             if let TCType::AtomType(TCAtomType::BoolType) = cond.type_ {
-                TCStmt::WhileStmt { cond, stmt: Box::new(new_stmt)  }
+                TCStmt::WhileStmt {
+                    cond,
+                    stmt: Box::new(new_stmt),
+                }
             } else {
                 Err(anyhow!("non-boolean expression in while loop condition"))?
             }
-        },
+        }
         Stmt::IfStmt {
             cond,
             stmt,
             else_stmt,
         } => {
             let cond = typecheck_exp(cond, defined_functions, &defined_vars)?;
-            let new_stmt = typecheck_stmt(*stmt, defined_functions, &mut defined_vars.clone(), should_return.clone())?;
+            let new_stmt = typecheck_stmt(
+                *stmt,
+                defined_functions,
+                &mut defined_vars.clone(),
+                should_return.clone(),
+            )?;
 
             if let TCType::AtomType(TCAtomType::BoolType) = cond.type_ {
                 if let Some(else_stmt) = else_stmt {
-                    let new_else_stmt = typecheck_stmt(*else_stmt, defined_functions, &mut defined_vars.clone(), should_return.clone())?;
-                    TCStmt::IfStmt { cond, 
-                                     stmt: Box::new(new_stmt), 
-                                     else_stmt: Some(Box::new(new_else_stmt))  }
+                    let new_else_stmt = typecheck_stmt(
+                        *else_stmt,
+                        defined_functions,
+                        &mut defined_vars.clone(),
+                        should_return.clone(),
+                    )?;
+                    TCStmt::IfStmt {
+                        cond,
+                        stmt: Box::new(new_stmt),
+                        else_stmt: Some(Box::new(new_else_stmt)),
+                    }
                 } else {
-                    TCStmt::IfStmt { cond, 
-                                     stmt: Box::new(new_stmt), 
-                                     else_stmt: None }
+                    TCStmt::IfStmt {
+                        cond,
+                        stmt: Box::new(new_stmt),
+                        else_stmt: None,
+                    }
                 }
             } else {
                 Err(anyhow!("non-boolean expression in while loop condition"))?
             }
-        },
-        Stmt::PrintStmt(exp) => TCStmt::PrintStmt(typecheck_exp(exp, defined_functions, &defined_vars)?),
+        }
+        Stmt::PrintStmt(exp) => {
+            TCStmt::PrintStmt(typecheck_exp(exp, defined_functions, &defined_vars)?)
+        }
         Stmt::PrintStmtSlit(stri) => TCStmt::PrintStmtSlit(stri),
     };
     Ok(new_stmt)
@@ -254,27 +286,49 @@ pub enum TCExp {
     },
 }
 
+// atom types become atom types, ref types become atoms, void types error
+fn maybe_deref(type_: TCType) -> Result<TCAtomType> {
+    match type_ {
+        TCType::AtomType(tca) => Ok(tca),
+        TCType::VoidType => Err(anyhow!("cannot deref voidtype")),
+        TCType::Ref(_, tca) => Ok(tca),
+    }
+}
+
 fn typecheck_exp(
     exp: Exp,
     defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
     defined_vars: &HashMap<String, TCType>,
 ) -> Result<TypedExp> {
     match exp {
-        Exp::Assign { varid, exp: assignment_exp } => {
+        Exp::Assign {
+            varid,
+            exp: assignment_exp,
+        } => {
             let assignment_exp = typecheck_exp(*assignment_exp, defined_functions, defined_vars)?;
             let vartype = defined_vars.get(&varid);
             match vartype {
                 Some(type_) => {
-                    if *type_ != assignment_exp.type_ {
-                        Err(anyhow!("mismatched types in assign statement"))?
+                    // it makes sense to error on void types here- you would never have a ref to one or try to assign it
+                    if maybe_deref(type_.clone())? != maybe_deref(assignment_exp.type_.clone())? {
+                        Err(anyhow!(format!("mismatched types in assign statement, varid: {:?}, vartype: {:?}, expression: {:?}", varid, type_, &assignment_exp)))?
                     }
-                    let new_exp = TCExp::Assign { varid, exp: Box::new(assignment_exp) };
-                    Ok(TypedExp{ type_: type_.clone(), exp: new_exp })
+                    let new_exp = TCExp::Assign {
+                        varid,
+                        exp: Box::new(assignment_exp),
+                    };
+                    Ok(TypedExp {
+                        type_: type_.clone(),
+                        exp: new_exp,
+                    })
                 }
-                None => Err(anyhow!("assign statement to undeclared variable"))?
+                None => Err(anyhow!("assign statement to undeclared variable"))?,
             }
-        },
-        Exp::Cast { type_: cast_type, exp: casted_exp } => {
+        }
+        Exp::Cast {
+            type_: cast_type,
+            exp: casted_exp,
+        } => {
             let cast_type: TCType = cast_type.try_into()?;
             let new_exp = typecheck_exp(*casted_exp, defined_functions, defined_vars)?;
 
@@ -283,125 +337,177 @@ fn typecheck_exp(
             match new_exp.type_ {
                 TCType::AtomType(TCAtomType::IntType)
                 | TCType::AtomType(TCAtomType::CIntType)
-                | TCType::AtomType(TCAtomType::FloatType)
-                    => { match cast_type {
-                            TCType::AtomType(TCAtomType::IntType)
-                            | TCType::AtomType(TCAtomType::CIntType)
-                            | TCType::AtomType(TCAtomType::FloatType)
-                                => Ok(TypedExp {type_: cast_type, exp: new_exp.exp } ),
-                            _ => Err(anyhow!("illegal type cast (num to non-num)"))?
-                        }
-                    },
+                | TCType::AtomType(TCAtomType::FloatType) => match cast_type {
+                    TCType::AtomType(TCAtomType::IntType)
+                    | TCType::AtomType(TCAtomType::CIntType)
+                    | TCType::AtomType(TCAtomType::FloatType) => Ok(TypedExp {
+                        type_: cast_type.clone(),
+                        exp: TCExp::Cast {
+                            type_: cast_type,
+                            exp: Box::new(new_exp),
+                        },
+                    }),
+                    _ => Err(anyhow!("illegal type cast (num to non-num)"))?,
+                },
                 TCType::AtomType(TCAtomType::BoolType) => {
                     if let TCType::AtomType(TCAtomType::BoolType) = cast_type {
-                        Ok(TypedExp {type_: cast_type, exp: new_exp.exp } )
+                        Ok(TypedExp {
+                            type_: cast_type.clone(),
+                            exp: TCExp::Cast {
+                                type_: cast_type,
+                                exp: Box::new(new_exp),
+                            },
+                        })
                     } else {
                         Err(anyhow!("illegal type cast (bool to non-bool)"))?
                     }
                 }
-                _ => Err(anyhow!("illegal type cast (refs or something)"))?
+                _ => Err(anyhow!("illegal type cast (refs or something)"))?,
             }
-        },
+        }
         Exp::BinOp { op, lhs, rhs } => {
             let lhs = typecheck_exp(*lhs, defined_functions, defined_vars)?;
             let rhs = typecheck_exp(*rhs, defined_functions, defined_vars)?;
-            
-            if lhs.type_ != rhs.type_ {  // implicit casts NOT supported, per the spec
+
+            if maybe_deref(lhs.type_.clone())? != maybe_deref(rhs.type_.clone())? {
+                // implicit casts NOT supported, per the spec
                 Err(anyhow!("mismatched types in binary expression"))?
             }
 
             // if I move the new_exp definition out here the borrow checker yells at me :(
             match op {
-                BOp::Mult | BOp::Div | BOp::Add | BOp::Sub =>  {
-                    match lhs.type_ {
-                        TCType::AtomType(TCAtomType::IntType)
-                        | TCType::AtomType(TCAtomType::CIntType)
-                        | TCType::AtomType(TCAtomType::FloatType)
-                            => {
-                                let type_ = lhs.type_.clone();
-                                let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
-                                Ok(TypedExp { type_, exp: new_exp })
-                            }
-                        _ => Err(anyhow!("arithmetic operation on non-num types"))?
+                BOp::Mult | BOp::Div | BOp::Add | BOp::Sub => match lhs.type_ {
+                    TCType::AtomType(TCAtomType::IntType)
+                    | TCType::AtomType(TCAtomType::CIntType)
+                    | TCType::AtomType(TCAtomType::FloatType) => {
+                        let type_ = lhs.type_.clone();
+                        let new_exp = TCExp::BinOp {
+                            op: op.clone(),
+                            lhs: Box::new(lhs),
+                            rhs: Box::new(rhs),
+                        };
+                        Ok(TypedExp {
+                            type_,
+                            exp: new_exp,
+                        })
                     }
+                    _ => Err(anyhow!("arithmetic operation on non-num types"))?,
                 },
                 BOp::EqTo => {
-                    let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
-                    Ok(TypedExp { type_: TCType::AtomType(TCAtomType::BoolType), exp: new_exp })
-                },
-                BOp::Gt | BOp::Lt => {
-                    match lhs.type_ {
-                        TCType::AtomType(TCAtomType::IntType)
-                        | TCType::AtomType(TCAtomType::CIntType)
-                        | TCType::AtomType(TCAtomType::FloatType)
-                            => {
-                                let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
-                                Ok(TypedExp { type_: TCType::AtomType(TCAtomType::BoolType), exp: new_exp })
-                            }
-                        _ => Err(anyhow!("comparison between non-num types"))?
+                    let new_exp = TCExp::BinOp {
+                        op: op.clone(),
+                        lhs: Box::new(lhs),
+                        rhs: Box::new(rhs),
+                    };
+                    Ok(TypedExp {
+                        type_: TCType::AtomType(TCAtomType::BoolType),
+                        exp: new_exp,
+                    })
+                }
+                BOp::Gt | BOp::Lt => match lhs.type_ {
+                    TCType::AtomType(TCAtomType::IntType)
+                    | TCType::AtomType(TCAtomType::CIntType)
+                    | TCType::AtomType(TCAtomType::FloatType) => {
+                        let new_exp = TCExp::BinOp {
+                            op: op.clone(),
+                            lhs: Box::new(lhs),
+                            rhs: Box::new(rhs),
+                        };
+                        Ok(TypedExp {
+                            type_: TCType::AtomType(TCAtomType::BoolType),
+                            exp: new_exp,
+                        })
                     }
+                    _ => Err(anyhow!("comparison between non-num types"))?,
                 },
                 BOp::And | BOp::Or => {
                     if let TCType::AtomType(TCAtomType::BoolType) = lhs.type_ {
-                        let new_exp = TCExp::BinOp{ op: op.clone(), lhs: Box::new(lhs), rhs: Box::new(rhs) };
-                        Ok(TypedExp { type_: TCType::AtomType(TCAtomType::BoolType), exp: new_exp })
+                        let new_exp = TCExp::BinOp {
+                            op: op.clone(),
+                            lhs: Box::new(lhs),
+                            rhs: Box::new(rhs),
+                        };
+                        Ok(TypedExp {
+                            type_: TCType::AtomType(TCAtomType::BoolType),
+                            exp: new_exp,
+                        })
                     } else {
                         Err(anyhow!("boolean operation on non-boolean types"))?
                     }
-                },
+                }
             }
-
-        },
+        }
         Exp::UnaryOp { op, exp } => {
             let exp = typecheck_exp(*exp, defined_functions, defined_vars)?;
             match (op.clone(), exp.type_.clone()) {
                 (UOp::BitwiseNeg, TCType::AtomType(TCAtomType::BoolType)) => {
-                    let tcexp = TCExp::UnaryOp{ op, exp: Box::new(exp) };
-                    Ok(TypedExp{ type_: TCType::AtomType(TCAtomType::BoolType), exp: tcexp })
-                },
-                (UOp::SignedNeg, TCType::AtomType(TCAtomType::IntType)) 
-                | (UOp::SignedNeg, TCType::AtomType(TCAtomType::CIntType)) 
-                | (UOp::SignedNeg, TCType::AtomType(TCAtomType::FloatType)) 
-                    => {
-                        let type_ = exp.type_.clone();
-                        let tcexp = TCExp::UnaryOp{ op, exp: Box::new(exp) };
-                        Ok(TypedExp{ type_, exp: tcexp })
-                    },
-                _ => Err(anyhow!("illegal type in unary expression"))?
+                    let tcexp = TCExp::UnaryOp {
+                        op,
+                        exp: Box::new(exp),
+                    };
+                    Ok(TypedExp {
+                        type_: TCType::AtomType(TCAtomType::BoolType),
+                        exp: tcexp,
+                    })
+                }
+                (UOp::SignedNeg, TCType::AtomType(TCAtomType::IntType))
+                | (UOp::SignedNeg, TCType::AtomType(TCAtomType::CIntType))
+                | (UOp::SignedNeg, TCType::AtomType(TCAtomType::FloatType)) => {
+                    let type_ = exp.type_.clone();
+                    let tcexp = TCExp::UnaryOp {
+                        op,
+                        exp: Box::new(exp),
+                    };
+                    Ok(TypedExp { type_, exp: tcexp })
+                }
+                _ => Err(anyhow!("illegal type in unary expression"))?,
             }
-        },
+        }
         Exp::Literal(lit) => {
             match lit {
-                Lit::LitBool(b) => {
+                Lit::LitBool(_) => {
                     let type_ = TCType::AtomType(TCAtomType::BoolType);
-                    Ok(TypedExp{ type_, exp: TCExp::Literal(lit) })
-                },
-                Lit::LitInt(i) => {
+                    Ok(TypedExp {
+                        type_,
+                        exp: TCExp::Literal(lit),
+                    })
+                }
+                Lit::LitInt(_) => {
                     // cints not supported yet
                     let type_ = TCType::AtomType(TCAtomType::IntType);
-                    Ok(TypedExp{ type_, exp: TCExp::Literal(lit) })
-                },
-                Lit::LitFloat(f) => {
+                    Ok(TypedExp {
+                        type_,
+                        exp: TCExp::Literal(lit),
+                    })
+                }
+                Lit::LitFloat(_) => {
                     let type_ = TCType::AtomType(TCAtomType::FloatType);
-                    Ok(TypedExp{ type_, exp: TCExp::Literal(lit) })
+                    Ok(TypedExp {
+                        type_,
+                        exp: TCExp::Literal(lit),
+                    })
                 }
             }
-        },
+        }
         Exp::VarVal(varid) => {
             let vartype = defined_vars.get(&varid);
             match vartype {
                 None => Err(anyhow!("variable not defined"))?,
-                Some(TCType::Ref(noalias, atype)) => {
+                Some(TCType::Ref(_, atype)) => {
                     // treat ref types within expressions as though they're the actual type
                     // handle dereferencing, uh, later
-                    Ok(TypedExp { type_: TCType::AtomType(atype.clone()), exp: TCExp::VarVal(varid) })
+                    Ok(TypedExp {
+                        type_: TCType::AtomType(atype.clone()),
+                        exp: TCExp::VarVal(varid),
+                    })
                 }
-                Some(atype) => {
-                    Ok(TypedExp { type_: atype.clone(), exp: TCExp::VarVal(varid) })
-                }
+                Some(atype) => Ok(TypedExp {
+                    type_: atype.clone(),
+                    exp: TCExp::VarVal(varid),
+                }),
             }
-        },
-        Exp::FuncCall{ globid, exps } => {
+        }
+        Exp::FuncCall { globid, exps } => {
             // check that function is in defined_functions
             // if it is, grab the types of each of its arguments, typecheck the corresponding exp
             // in exps, and make sure the types match
@@ -419,7 +525,7 @@ fn typecheck_exp(
                     for (arg_type, exp) in arg_types.iter().zip(exps) {
                         let exp = typecheck_exp(*exp, defined_functions, defined_vars)?;
                         let exp_type = exp.type_.clone();
-                        
+
                         // treat ref type arguments separately
                         if let TCType::Ref(_, atype) = arg_type {
                             match exp.exp {
@@ -427,8 +533,10 @@ fn typecheck_exp(
                                     if TCType::AtomType(*atype) != exp_type {
                                         Err(anyhow!("wrong type in ref type argument"))?
                                     }
-                                },
-                                _ => Err(anyhow!("non-variable expression passed to ref type argument"))?
+                                }
+                                _ => Err(anyhow!(
+                                    "non-variable expression passed to ref type argument"
+                                ))?,
                             }
                         } else {
                             if *arg_type != exp_type {
@@ -438,22 +546,35 @@ fn typecheck_exp(
                         arg_exps.push(exp);
                     }
                     let type_ = return_type.clone();
-                    let new_exp = TCExp::FuncCall{ globid, exps: arg_exps };
-                    Ok( TypedExp{ type_, exp: new_exp } )
-                } 
-                else {
+                    let new_exp = TCExp::FuncCall {
+                        globid,
+                        exps: arg_exps,
+                    };
+                    Ok(TypedExp {
+                        type_,
+                        exp: new_exp,
+                    })
+                } else {
                     if arg_types.len() > 0 {
-                        Err(anyhow!("no arguments given to a function that expects arguments"))?
+                        Err(anyhow!(
+                            "no arguments given to a function that expects arguments"
+                        ))?
                     } else {
                         let type_ = return_type.clone();
-                        let new_exp = TCExp::FuncCall{ globid, exps: arg_exps };
-                        Ok( TypedExp{ type_, exp: new_exp } )
+                        let new_exp = TCExp::FuncCall {
+                            globid,
+                            exps: arg_exps,
+                        };
+                        Ok(TypedExp {
+                            type_,
+                            exp: new_exp,
+                        })
                     }
                 }
             } else {
                 Err(anyhow!("function not defined"))?
             }
-        },
+        }
     }
 }
 
@@ -492,6 +613,8 @@ impl TryFrom<Type> for TCType {
     fn try_from(t: Type) -> Result<Self, Self::Error> {
         Ok(if let Type::Ref(b, t_inner) = t {
             TCType::Ref(b, TCAtomType::try_from(*t_inner)?)
+        } else if let Type::VoidType = t {
+            TCType::VoidType
         } else {
             TCType::AtomType(TCAtomType::try_from(t)?)
         })
@@ -558,9 +681,16 @@ pub fn typecheck(prog: Prog) -> Result<TCProg> {
     //    All programs must define exactly one function named “run” which returns an integer (the
     // program exit status) and takes no arguments.
 
-    panic!();
-    //Ok(TCProg {
-    //    externs: tcprog_externs,
-    //    funcs: tcprog_funcs,
-    //})
+    if let Some(run_fun_t) = fn_name_to_type.get("run") {
+        if run_fun_t.0 == TCType::AtomType(TCAtomType::IntType) && run_fun_t.1.len() == 0 {
+            Ok(TCProg {
+                externs: tcprog_externs,
+                funcs: tcprog_funcs,
+            })
+        } else {
+            Err(anyhow!("run function has incorrect type"))
+        }
+    } else {
+        Err(anyhow!("no function named run"))
+    }
 }
