@@ -407,7 +407,52 @@ fn typecheck_exp(
             // in exps, and make sure the types match
             // but if the function signature has a ref type, the exp in exps corresponding to that
             // argument needs to be a VarVal with a matching type
-            unimplemented!("UnU")
+            let func = defined_functions.get(&globid);
+            let mut arg_exps: Vec<TypedExp> = vec![];
+
+            if let Some((return_type, arg_types)) = func {
+                if let Some(exps) = exps {
+                    if exps.len() != arg_types.len() {
+                        Err(anyhow!("incorrect number of function arguments"))?
+                    }
+
+                    for (arg_type, exp) in arg_types.iter().zip(exps) {
+                        let exp = typecheck_exp(*exp, defined_functions, defined_vars)?;
+                        let exp_type = exp.type_.clone();
+                        
+                        // treat ref type arguments separately
+                        if let TCType::Ref(_, atype) = arg_type {
+                            match exp.exp {
+                                TCExp::VarVal(_) => {
+                                    if TCType::AtomType(*atype) != exp_type {
+                                        Err(anyhow!("wrong type in ref type argument"))?
+                                    }
+                                },
+                                _ => Err(anyhow!("non-variable expression passed to ref type argument"))?
+                            }
+                        } else {
+                            if *arg_type != exp_type {
+                                Err(anyhow!("mismatched types in function arguments"))?
+                            }
+                        }
+                        arg_exps.push(exp);
+                    }
+                    let type_ = return_type.clone();
+                    let new_exp = TCExp::FuncCall{ globid, exps: arg_exps };
+                    Ok( TypedExp{ type_, exp: new_exp } )
+                } 
+                else {
+                    if arg_types.len() > 0 {
+                        Err(anyhow!("no arguments given to a function that expects arguments"))?
+                    } else {
+                        let type_ = return_type.clone();
+                        let new_exp = TCExp::FuncCall{ globid, exps: arg_exps };
+                        Ok( TypedExp{ type_, exp: new_exp } )
+                    }
+                }
+            } else {
+                Err(anyhow!("function not defined"))?
+            }
         },
     }
 }
