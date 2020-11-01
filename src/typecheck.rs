@@ -1,16 +1,17 @@
 use anyhow::{anyhow, Result};
+use serde::{Deserialize, Serialize};
 
 use crate::ast::*;
 use std::collections::HashMap;
 use std::convert::{TryFrom, TryInto};
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TCProg {
     externs: Vec<TCExtern>,
     funcs: Vec<TCFunc>,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct TCExtern {
     pub type_: TCType,
     pub globid: String,
@@ -34,7 +35,7 @@ impl TryFrom<Extern> for TCExtern {
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 struct TCFunc {
     pub type_: TCType,
     pub globid: String,
@@ -81,7 +82,7 @@ fn typecheck_fn(
     })
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TCBlock {
     pub stmts: Vec<TCStmt>,
 }
@@ -230,7 +231,7 @@ fn typecheck_stmt(
     Ok(new_stmt)
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum TCStmt {
     Blk(TCBlock),
     ReturnStmt(Option<TypedExp>),
@@ -252,14 +253,14 @@ pub enum TCStmt {
     PrintStmtSlit(String),
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypedExp {
     // ifs and whiles have no type- representing unit as none
     type_: TCType,
     exp: TCExp,
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub enum TCExp {
     Assign {
         varid: String,
@@ -578,13 +579,13 @@ fn typecheck_exp(
     }
 }
 
-#[derive(Debug, PartialEq)]
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TCVDecl {
     pub type_: TCType,
     pub varid: String,
 }
 
-#[derive(Debug, PartialEq, Clone)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
 pub enum TCType {
     AtomType(TCAtomType),
     VoidType,
@@ -621,7 +622,7 @@ impl TryFrom<Type> for TCType {
     }
 }
 
-#[derive(Debug, PartialEq, Clone, Copy)]
+#[derive(Debug, Clone, Copy, PartialEq, Serialize, Deserialize)]
 pub enum TCAtomType {
     IntType,
     CIntType,
