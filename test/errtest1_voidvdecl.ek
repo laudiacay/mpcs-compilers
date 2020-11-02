@@ -1,0 +1,5 @@
+def int run() {
+    void $a = 3;
+    print "heyy" ;
+    return 0;
+}

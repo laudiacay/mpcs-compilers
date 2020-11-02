@@ -1,0 +1,11 @@
+def int uwu(int $n) {
+    int $m = $n * 2;
+    return $m + 1;
+}
+
+def int run() {
+    int $a = uwu(1);
+    ref int $b = uwu($a);
+    return $b;
+}
+

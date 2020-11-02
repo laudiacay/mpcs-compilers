@@ -1,0 +1,6 @@
+def int twoop() {
+    print "if every program needs a run function, then why have extern functions in the first place?";
+    print "like what if you just wanna twoop once in a while?";
+    print "twoop!";
+    return 69;
+}

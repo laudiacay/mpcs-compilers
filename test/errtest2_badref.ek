@@ -1,0 +1,6 @@
+def int run() {
+    int $a = 3;
+    ref int $b = $a;
+    ref ref int $c = $b;
+    return $a + $b + $c;
+}

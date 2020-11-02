@@ -152,7 +152,7 @@ fn typecheck_stmt(
                         ))?
                     }
                 } else {
-                    Err(anyhow!(""))?
+                    Err(anyhow!("reference type assigned to non-variable expression"))?
                 }
             } else {
                 if exp.type_ != vdecl.type_ {
@@ -598,7 +598,7 @@ impl TryFrom<VDecl> for TCVDecl {
     fn try_from(t: VDecl) -> Result<Self, Self::Error> {
         let type_ = t.type_.try_into()?;
         if let TCType::VoidType = type_ {
-            Err(anyhow!("VDecl cannot be an atomtype"))
+            Err(anyhow!("VDecl cannot be void"))
         } else {
             Ok(TCVDecl {
                 type_,
