@@ -41,19 +41,18 @@ fn main() {
 
     let typed_prog = typecheck::typecheck(prog);
 
-    match typed_prog {
-        Ok(typed_prog) => {
-            if matches.is_present("emit-ast") {
-                let output_file = matches.value_of("o").unwrap();
-                let file = File::create(output_file)
-                    .expect(&format!("failed to create output file at {}", output_file).to_string());
-                serde_yaml::to_writer(file, &typed_prog).expect("failed to write typed ast to file");
-            }
-        }
-        Err(msg) => {
-            println!("error: {}", msg);
-            std::process::exit(1);
-        }
+    if let Err(msg) = typed_prog {
+        println!("error: {}", msg);
+        std::process::exit(1);
+    }
+
+    let typed_prog = typed_prog.unwrap();
+
+    if matches.is_present("emit-ast") {
+        let output_file = matches.value_of("o").unwrap();
+        let file = File::create(output_file)
+            .expect(&format!("failed to create output file at {}", output_file).to_string());
+        serde_yaml::to_writer(file, &typed_prog).expect("failed to write typed ast to file");
     }
 }
 

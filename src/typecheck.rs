@@ -73,6 +73,7 @@ fn typecheck_fn(
         defined_functions,
         defined_vars,
         Some(re_type.clone()),
+        HashMap::new(),
     )?;
     Ok(TCFunc {
         type_: re_type,
@@ -92,6 +93,7 @@ fn typecheck_block(
     defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
     mut defined_vars: HashMap<String, TCType>, // idk what to do with the muts and the &s tbh
     should_return: Option<TCType>,
+    mut shadowed_vars: HashMap<String, TCType>,
 ) -> Result<TCBlock> {
     /*    /*
     All functions must be declared and/or defined before they are used.
@@ -109,6 +111,7 @@ fn typecheck_block(
                 defined_functions,
                 &mut defined_vars,
                 should_return.clone(),
+                &mut shadowed_vars,
             )?;
             tc_stmts.push(new_stmt);
         }
@@ -121,6 +124,7 @@ fn typecheck_stmt(
     defined_functions: &HashMap<String, (TCType, Vec<TCType>)>,
     defined_vars: &mut HashMap<String, TCType>, // idk what to do with the muts and the &s tbh
     should_return: Option<TCType>,
+    shadowed_vars: &mut HashMap<String, TCType>,
 ) -> Result<TCStmt> {
     let new_stmt = match stmt {
         Stmt::Blk(b) => TCStmt::Blk(typecheck_block(
@@ -128,6 +132,7 @@ fn typecheck_stmt(
             &defined_functions,
             defined_vars.clone(),
             should_return.clone(),
+            HashMap::new(),  // entering a new block allows shadowing existing vars
         )?),
         Stmt::ReturnStmt(exp) => match (exp, should_return.clone()) {
             (None, None) => TCStmt::ReturnStmt(None),
@@ -159,9 +164,12 @@ fn typecheck_stmt(
                     Err(anyhow!("variable declaration assigns to wrong type"))?
                 }
             }
-            if let Some(_) = defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
+
+            defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone());
+            if let Some(_) = shadowed_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
                 Err(anyhow!("duplicate variable definition"))?;
             }
+
             TCStmt::VDeclStmt { vdecl, exp }
         }
         Stmt::ExpStmt(exp) => {
@@ -174,6 +182,7 @@ fn typecheck_stmt(
                 defined_functions,
                 &mut defined_vars.clone(),
                 should_return.clone(),
+                &mut shadowed_vars.clone(),
             )?;
 
             // check that the condition is actually a bool. unsure if this is necessary.
@@ -197,6 +206,7 @@ fn typecheck_stmt(
                 defined_functions,
                 &mut defined_vars.clone(),
                 should_return.clone(),
+                &mut shadowed_vars.clone(),
             )?;
 
             if let TCType::AtomType(TCAtomType::BoolType) = cond.type_ {
@@ -206,6 +216,7 @@ fn typecheck_stmt(
                         defined_functions,
                         &mut defined_vars.clone(),
                         should_return.clone(),
+                        &mut shadowed_vars.clone(),
                     )?;
                     TCStmt::IfStmt {
                         cond,
