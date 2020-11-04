@@ -1,0 +1,107 @@
+---
+externs: []
+funcs:
+  - type_:
+      AtomType: IntType
+    globid: run
+    args: []
+    blk:
+      stmts:
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: n
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                Literal:
+                  LitInt: 1
+        - WhileStmt:
+            cond:
+              type_:
+                AtomType: BoolType
+              exp:
+                BinOp:
+                  op: Lt
+                  lhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      VarVal: n
+                  rhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      Literal:
+                        LitInt: 10
+            stmt:
+              VDeclStmt:
+                vdecl:
+                  type_:
+                    AtomType: IntType
+                  varid: a
+                exp:
+                  type_:
+                    AtomType: IntType
+                  exp:
+                    BinOp:
+                      op: Add
+                      lhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          VarVal: n
+                      rhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          Literal:
+                            LitInt: 1
+        - WhileStmt:
+            cond:
+              type_:
+                AtomType: BoolType
+              exp:
+                BinOp:
+                  op: Lt
+                  lhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      VarVal: n
+                  rhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      Literal:
+                        LitInt: 20
+            stmt:
+              VDeclStmt:
+                vdecl:
+                  type_:
+                    AtomType: IntType
+                  varid: a
+                exp:
+                  type_:
+                    AtomType: IntType
+                  exp:
+                    BinOp:
+                      op: Add
+                      lhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          VarVal: n
+                      rhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          Literal:
+                            LitInt: 2
+        - ReturnStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              VarVal: n

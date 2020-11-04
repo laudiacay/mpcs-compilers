@@ -178,7 +178,13 @@ Literal: Box<Exp> = {
     "true"  => Box::new(Exp::Literal(Lit::LitBool(true))),
     "false" => Box::new(Exp::Literal(Lit::LitBool(false))),
     <i:r"[0-9]+"> <f:r"\.[0-9]+"?> => match f {
-        None => Box::new(Exp::Literal(Lit::LitInt(i32::from_str(i).unwrap()))),
+        None => {
+            if i == "4" {
+                panic!() // crash introduced for fuzzing
+            } else {
+                Box::new(Exp::Literal(Lit::LitInt(i32::from_str(i).unwrap())))
+            }
+        },
         Some(f) => Box::new(Exp::Literal(Lit::LitFloat(format!("{}{}", i, f).parse().unwrap()))),
     }
 };
