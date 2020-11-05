@@ -1,42 +1,49 @@
 extern int getarg(int);
 extern float getargf(int);
 
-def int fib (int $n) {
-    if ($n < 2)
-        if ($n == 0)
-            return 0;
-        else
-            return 1;
-    
-    int $a = fib ($n - 1);
-    int $b = fib ($n - 2);
-    return $a + $b;
-}
+# This function has two noalias parameters: $a and $b. During any execution of
+# the function in which both are accessed they must point to different
+# underlying variables.
+def float test1(noalias ref float $a, noalias ref float $b, float $c) {
+  int $x   = 0;
+  int $xy  = 1;
+  int $xyz = 2;
 
-def void inc ¨ref int $n) {
-  $n = $n + 1;
-}
+  while ($xyz > 8) {
+    $x = [int] ($a + $b - $c / $a * $b);
+    if ($a == $b)
+      $xy = [int] 1;
+    else
+      $xy = 0;
+    if ($xyz > -$xy && $a < $b || ($c == $a || $x == 0)) {
+      return $a;
+    } else {
+      $a = 8.5;
+    }
 
-def void things (ref int $n) {
-  while (!($n > 100)) {
-    $n = $n * $n - 2;
+    $b = 7.2;
   }
+
+  return $c;
 }
 
 def int run () {
-    print "fib(5):";
-    int $val = fib(5);
-    print $val;
-    
-    print "fib(5)+1:";
-    inc($val);
-    print $val;
+  float $a = getargf(0);
+  float $b = getargf(1);
+  float $c = getargf(2);
 
-    print "something else:";
-    things($val);
-    print $val;
+  print "initial:";
+  print $a;
+  print $b;
+  print $c;
 
+  test1($a, $b, $E);
 
-    return 0;
+  print "final:";
+  print $a;
+  print $b;
+  print $c;
+
+  return 0;
 }
 

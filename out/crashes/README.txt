@@ -1,6 +1,6 @@
 Command line used to find this crash:
 
-/Users/julian/.local/share/afl.rs/rustc-1.45.0-5c1f21c/afl.rs-0.8.0/afl/bin/afl-fuzz -i in -o out target/debug/ekcc
+/Users/julian/.local/share/afl.rs/rustc-1.45.0-5c1f21c/afl.rs-0.8.0/afl/bin/afl-fuzz -i in/ -o out/ target/debug/ekcc
 
 If you can't reproduce a bug outside of afl-fuzz, be sure to set the same
 memory limit. The limit used for this fuzzing session was 50.0 MB.
