@@ -5,11 +5,7 @@ to install cargo and rustc (for compilation and running): run this script https:
 
 # HOW TO RUN THE FUZZ TESTER
 
-We fuzz tested our compiler using afl.rs, which is an AFL library for fuzzing Rust code. To run the fuzzer:
-
-1. install afl: `cargo install afl`
-2. build the fuzz target: `cargo afl build`
-3. start fuzzing: `cargo afl fuzz -i in -o out target/debug/ekcc`
+We fuzz tested our compiler using afl.rs, which is an AFL library for fuzzing Rust code. To run the fuzzer, run `make fuzz`.
 
 further documentation for rust afl can be found at https://rust-fuzz.github.io/book/afl.html
 
