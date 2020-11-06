@@ -3,13 +3,17 @@
 
 to install cargo and rustc (for compilation and running): run this script https://rustup.rs/
 
+# HOW TO RUN THE COMPILER
+
+`make` -> `./bin/ekcc --help`
+
 # HOW TO RUN THE FUZZ TESTER
 
-We fuzz tested our compiler using afl.rs, which is an AFL library for fuzzing Rust code. To run the fuzzer, run `make fuzz`.
+We fuzz tested our compiler using afl.rs, which is an AFL library for fuzzing Rust code. To install/run the fuzzer, run `make fuzz`.
 
 further documentation for rust afl can be found at https://rust-fuzz.github.io/book/afl.html
 
-# CRASH CASES
+# FUZZ TESTER CRASH CASES
 
 The fuzz tester found that reading larger integer literals than rust's i32 type can hold causes a crash.
 Specifically, the fuzzer found a crash based on code containing the following line:
