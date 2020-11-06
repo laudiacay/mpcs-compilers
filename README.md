@@ -16,6 +16,4 @@ Specifically, the fuzzer found a crash based on code containing the following li
 
 ```if ($n == 0)222222222222222222220;```
 
-The full input that caused the crash can be found at:
-
-```out/crashes/id\:000000\,sig\:06\,src\:000000\,time\:547433\,op\:havoc\,rep\:2```
+The file `test/crash.ek` demonstrates this bug using the statement `2147483648;`, which immediately causes a crash.
