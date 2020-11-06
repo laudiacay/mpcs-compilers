@@ -1,0 +1,321 @@
+---
+externs:
+  - type_:
+      AtomType: IntType
+    globid: getarg
+    args:
+      - AtomType: IntType
+  - type_:
+      AtomType: FloatType
+    globid: getargf
+    args:
+      - AtomType: IntType
+funcs:
+  - type_:
+      AtomType: IntType
+    globid: fib
+    args:
+      - type_:
+          AtomType: IntType
+        varid: n
+    blk:
+      stmts:
+        - IfStmt:
+            cond:
+              type_:
+                AtomType: BoolType
+              exp:
+                BinOp:
+                  op: Lt
+                  lhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      VarVal: n
+                  rhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      Literal:
+                        LitInt: 2
+            stmt:
+              IfStmt:
+                cond:
+                  type_:
+                    AtomType: BoolType
+                  exp:
+                    BinOp:
+                      op: EqTo
+                      lhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          VarVal: n
+                      rhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          Literal:
+                            LitInt: 0
+                stmt:
+                  ReturnStmt:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      Literal:
+                        LitInt: 0
+                else_stmt:
+                  ReturnStmt:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      Literal:
+                        LitInt: 1
+            else_stmt: ~
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: a
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                FuncCall:
+                  globid: fib
+                  exps:
+                    - type_:
+                        AtomType: IntType
+                      exp:
+                        BinOp:
+                          op: Sub
+                          lhs:
+                            type_:
+                              AtomType: IntType
+                            exp:
+                              VarVal: n
+                          rhs:
+                            type_:
+                              AtomType: IntType
+                            exp:
+                              Literal:
+                                LitInt: 1
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: b
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                FuncCall:
+                  globid: fib
+                  exps:
+                    - type_:
+                        AtomType: IntType
+                      exp:
+                        BinOp:
+                          op: Sub
+                          lhs:
+                            type_:
+                              AtomType: IntType
+                            exp:
+                              VarVal: n
+                          rhs:
+                            type_:
+                              AtomType: IntType
+                            exp:
+                              Literal:
+                                LitInt: 2
+        - ReturnStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              BinOp:
+                op: Add
+                lhs:
+                  type_:
+                    AtomType: IntType
+                  exp:
+                    VarVal: a
+                rhs:
+                  type_:
+                    AtomType: IntType
+                  exp:
+                    VarVal: b
+  - type_: VoidType
+    globid: inc
+    args:
+      - type_:
+          Ref:
+            - false
+            - IntType
+        varid: n
+    blk:
+      stmts:
+        - ExpStmt:
+            type_:
+              Ref:
+                - false
+                - IntType
+            exp:
+              Assign:
+                varid: n
+                exp:
+                  type_:
+                    AtomType: IntType
+                  exp:
+                    BinOp:
+                      op: Add
+                      lhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          VarVal: n
+                      rhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          Literal:
+                            LitInt: 1
+  - type_: VoidType
+    globid: things
+    args:
+      - type_:
+          Ref:
+            - false
+            - IntType
+        varid: n
+    blk:
+      stmts:
+        - WhileStmt:
+            cond:
+              type_:
+                AtomType: BoolType
+              exp:
+                UnaryOp:
+                  op: BitwiseNeg
+                  exp:
+                    type_:
+                      AtomType: BoolType
+                    exp:
+                      BinOp:
+                        op: Gt
+                        lhs:
+                          type_:
+                            AtomType: IntType
+                          exp:
+                            VarVal: n
+                        rhs:
+                          type_:
+                            AtomType: IntType
+                          exp:
+                            Literal:
+                              LitInt: 100
+            stmt:
+              Blk:
+                stmts:
+                  - ExpStmt:
+                      type_:
+                        Ref:
+                          - false
+                          - IntType
+                      exp:
+                        Assign:
+                          varid: n
+                          exp:
+                            type_:
+                              AtomType: IntType
+                            exp:
+                              BinOp:
+                                op: Sub
+                                lhs:
+                                  type_:
+                                    AtomType: IntType
+                                  exp:
+                                    BinOp:
+                                      op: Mult
+                                      lhs:
+                                        type_:
+                                          AtomType: IntType
+                                        exp:
+                                          VarVal: n
+                                      rhs:
+                                        type_:
+                                          AtomType: IntType
+                                        exp:
+                                          VarVal: n
+                                rhs:
+                                  type_:
+                                    AtomType: IntType
+                                  exp:
+                                    Literal:
+                                      LitInt: 2
+  - type_:
+      AtomType: IntType
+    globid: run
+    args: []
+    blk:
+      stmts:
+        - PrintStmtSlit: "\"fib(5):\""
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: val
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                FuncCall:
+                  globid: fib
+                  exps:
+                    - type_:
+                        AtomType: IntType
+                      exp:
+                        Literal:
+                          LitInt: 5
+        - PrintStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              VarVal: val
+        - PrintStmtSlit: "\"fib(5)+1:\""
+        - ExpStmt:
+            type_: VoidType
+            exp:
+              FuncCall:
+                globid: inc
+                exps:
+                  - type_:
+                      AtomType: IntType
+                    exp:
+                      VarVal: val
+        - PrintStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              VarVal: val
+        - PrintStmtSlit: "\"something else:\""
+        - ExpStmt:
+            type_: VoidType
+            exp:
+              FuncCall:
+                globid: things
+                exps:
+                  - type_:
+                      AtomType: IntType
+                    exp:
+                      VarVal: val
+        - PrintStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              VarVal: val
+        - ReturnStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              Literal:
+                LitInt: 0

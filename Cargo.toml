@@ -10,10 +10,19 @@ edition = "2018"
 lalrpop = { version = "0.19.0", features = ["lexer"] }
 
 [dependencies]
-clap = "2.33"
 lalrpop = "0.19.0"
 lalrpop-util = "0.19.0"
 regex = "1"
 serde = { version = "1.0", features = ["derive", "rc"] }
 serde_yaml = "0.8"
 anyhow = "1.0"
+clap = "2.33"
+afl = "*"
+
+[[bin]]
+name = "ekcc"
+path = "src/main.rs"
+
+[[bin]]
+name = "ekcc-fuzz"
+path = "src/fuzz-main.rs"

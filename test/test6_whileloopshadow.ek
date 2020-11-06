@@ -1,0 +1,8 @@
+def int run() {
+    int $a = 1;
+
+    while($a > 0) 
+        int $a = 1;
+    
+    return 1;
+}

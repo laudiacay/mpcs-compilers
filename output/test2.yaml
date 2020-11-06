@@ -1,0 +1,446 @@
+---
+externs:
+  - type_:
+      AtomType: IntType
+    globid: getarg
+    args:
+      - AtomType: IntType
+  - type_:
+      AtomType: FloatType
+    globid: getargf
+    args:
+      - AtomType: IntType
+funcs:
+  - type_:
+      AtomType: FloatType
+    globid: test1
+    args:
+      - type_:
+          Ref:
+            - true
+            - FloatType
+        varid: a
+      - type_:
+          Ref:
+            - true
+            - FloatType
+        varid: b
+      - type_:
+          AtomType: FloatType
+        varid: c
+    blk:
+      stmts:
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: x
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                Literal:
+                  LitInt: 0
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: xy
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                Literal:
+                  LitInt: 1
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: xyz
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                Literal:
+                  LitInt: 2
+        - WhileStmt:
+            cond:
+              type_:
+                AtomType: BoolType
+              exp:
+                BinOp:
+                  op: Gt
+                  lhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      VarVal: xyz
+                  rhs:
+                    type_:
+                      AtomType: IntType
+                    exp:
+                      Literal:
+                        LitInt: 8
+            stmt:
+              Blk:
+                stmts:
+                  - ExpStmt:
+                      type_:
+                        AtomType: IntType
+                      exp:
+                        Assign:
+                          varid: x
+                          exp:
+                            type_:
+                              AtomType: IntType
+                            exp:
+                              Cast:
+                                type_:
+                                  AtomType: IntType
+                                exp:
+                                  type_:
+                                    AtomType: FloatType
+                                  exp:
+                                    BinOp:
+                                      op: Sub
+                                      lhs:
+                                        type_:
+                                          AtomType: FloatType
+                                        exp:
+                                          BinOp:
+                                            op: Add
+                                            lhs:
+                                              type_:
+                                                AtomType: FloatType
+                                              exp:
+                                                VarVal: a
+                                            rhs:
+                                              type_:
+                                                AtomType: FloatType
+                                              exp:
+                                                VarVal: b
+                                      rhs:
+                                        type_:
+                                          AtomType: FloatType
+                                        exp:
+                                          BinOp:
+                                            op: Mult
+                                            lhs:
+                                              type_:
+                                                AtomType: FloatType
+                                              exp:
+                                                BinOp:
+                                                  op: Div
+                                                  lhs:
+                                                    type_:
+                                                      AtomType: FloatType
+                                                    exp:
+                                                      VarVal: c
+                                                  rhs:
+                                                    type_:
+                                                      AtomType: FloatType
+                                                    exp:
+                                                      VarVal: a
+                                            rhs:
+                                              type_:
+                                                AtomType: FloatType
+                                              exp:
+                                                VarVal: b
+                  - IfStmt:
+                      cond:
+                        type_:
+                          AtomType: BoolType
+                        exp:
+                          BinOp:
+                            op: EqTo
+                            lhs:
+                              type_:
+                                AtomType: FloatType
+                              exp:
+                                VarVal: a
+                            rhs:
+                              type_:
+                                AtomType: FloatType
+                              exp:
+                                VarVal: b
+                      stmt:
+                        ExpStmt:
+                          type_:
+                            AtomType: IntType
+                          exp:
+                            Assign:
+                              varid: xy
+                              exp:
+                                type_:
+                                  AtomType: IntType
+                                exp:
+                                  Cast:
+                                    type_:
+                                      AtomType: IntType
+                                    exp:
+                                      type_:
+                                        AtomType: IntType
+                                      exp:
+                                        Literal:
+                                          LitInt: 1
+                      else_stmt:
+                        ExpStmt:
+                          type_:
+                            AtomType: IntType
+                          exp:
+                            Assign:
+                              varid: xy
+                              exp:
+                                type_:
+                                  AtomType: IntType
+                                exp:
+                                  Literal:
+                                    LitInt: 0
+                  - IfStmt:
+                      cond:
+                        type_:
+                          AtomType: BoolType
+                        exp:
+                          BinOp:
+                            op: Or
+                            lhs:
+                              type_:
+                                AtomType: BoolType
+                              exp:
+                                BinOp:
+                                  op: And
+                                  lhs:
+                                    type_:
+                                      AtomType: BoolType
+                                    exp:
+                                      BinOp:
+                                        op: Gt
+                                        lhs:
+                                          type_:
+                                            AtomType: IntType
+                                          exp:
+                                            VarVal: xyz
+                                        rhs:
+                                          type_:
+                                            AtomType: IntType
+                                          exp:
+                                            UnaryOp:
+                                              op: SignedNeg
+                                              exp:
+                                                type_:
+                                                  AtomType: IntType
+                                                exp:
+                                                  VarVal: xy
+                                  rhs:
+                                    type_:
+                                      AtomType: BoolType
+                                    exp:
+                                      BinOp:
+                                        op: Lt
+                                        lhs:
+                                          type_:
+                                            AtomType: FloatType
+                                          exp:
+                                            VarVal: a
+                                        rhs:
+                                          type_:
+                                            AtomType: FloatType
+                                          exp:
+                                            VarVal: b
+                            rhs:
+                              type_:
+                                AtomType: BoolType
+                              exp:
+                                BinOp:
+                                  op: Or
+                                  lhs:
+                                    type_:
+                                      AtomType: BoolType
+                                    exp:
+                                      BinOp:
+                                        op: EqTo
+                                        lhs:
+                                          type_:
+                                            AtomType: FloatType
+                                          exp:
+                                            VarVal: c
+                                        rhs:
+                                          type_:
+                                            AtomType: FloatType
+                                          exp:
+                                            VarVal: a
+                                  rhs:
+                                    type_:
+                                      AtomType: BoolType
+                                    exp:
+                                      BinOp:
+                                        op: EqTo
+                                        lhs:
+                                          type_:
+                                            AtomType: IntType
+                                          exp:
+                                            VarVal: x
+                                        rhs:
+                                          type_:
+                                            AtomType: IntType
+                                          exp:
+                                            Literal:
+                                              LitInt: 0
+                      stmt:
+                        Blk:
+                          stmts:
+                            - ReturnStmt:
+                                type_:
+                                  AtomType: FloatType
+                                exp:
+                                  VarVal: a
+                      else_stmt:
+                        Blk:
+                          stmts:
+                            - ExpStmt:
+                                type_:
+                                  Ref:
+                                    - true
+                                    - FloatType
+                                exp:
+                                  Assign:
+                                    varid: a
+                                    exp:
+                                      type_:
+                                        AtomType: FloatType
+                                      exp:
+                                        Literal:
+                                          LitFloat: 8.5
+                  - ExpStmt:
+                      type_:
+                        Ref:
+                          - true
+                          - FloatType
+                      exp:
+                        Assign:
+                          varid: b
+                          exp:
+                            type_:
+                              AtomType: FloatType
+                            exp:
+                              Literal:
+                                LitFloat: 7.2
+        - ReturnStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              VarVal: c
+  - type_:
+      AtomType: IntType
+    globid: run
+    args: []
+    blk:
+      stmts:
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: FloatType
+              varid: a
+            exp:
+              type_:
+                AtomType: FloatType
+              exp:
+                FuncCall:
+                  globid: getargf
+                  exps:
+                    - type_:
+                        AtomType: IntType
+                      exp:
+                        Literal:
+                          LitInt: 0
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: FloatType
+              varid: b
+            exp:
+              type_:
+                AtomType: FloatType
+              exp:
+                FuncCall:
+                  globid: getargf
+                  exps:
+                    - type_:
+                        AtomType: IntType
+                      exp:
+                        Literal:
+                          LitInt: 1
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: FloatType
+              varid: c
+            exp:
+              type_:
+                AtomType: FloatType
+              exp:
+                FuncCall:
+                  globid: getargf
+                  exps:
+                    - type_:
+                        AtomType: IntType
+                      exp:
+                        Literal:
+                          LitInt: 2
+        - PrintStmtSlit: "\"initial:\""
+        - PrintStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              VarVal: a
+        - PrintStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              VarVal: b
+        - PrintStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              VarVal: c
+        - ExpStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              FuncCall:
+                globid: test1
+                exps:
+                  - type_:
+                      AtomType: FloatType
+                    exp:
+                      VarVal: a
+                  - type_:
+                      AtomType: FloatType
+                    exp:
+                      VarVal: b
+                  - type_:
+                      AtomType: FloatType
+                    exp:
+                      VarVal: c
+        - PrintStmtSlit: "\"final:\""
+        - PrintStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              VarVal: a
+        - PrintStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              VarVal: b
+        - PrintStmt:
+            type_:
+              AtomType: FloatType
+            exp:
+              VarVal: c
+        - ReturnStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              Literal:
+                LitInt: 0
