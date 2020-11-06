@@ -1,0 +1,87 @@
+rm -f afl-gcc afl-fuzz afl-showmap afl-tmin afl-gotcpu afl-analyze libradamsa.so afl-fuzz-document afl-as as afl-g++ afl-clang afl-clang++ *.o src/*.o *~ a.out core core.[1-9][0-9]* *.stackdump .test .test1 .test2 test-instr .test-instr0 .test-instr1 qemu_mode/qemu-3.1.1.tar.xz afl-qemu-trace afl-gcc-fast afl-gcc-pass.so afl-gcc-rt.o afl-g++-fast ld *.so *.8 test/unittests/*.o test/unittests/unit_maybe_alloc test/unittests/preallocable
+rm -rf out_dir qemu_mode/qemu-3.1.1 *.dSYM */*.dSYM
+/Library/Developer/CommandLineTools/usr/bin/make -C llvm_mode clean
+[+] llvm_mode detected llvm < 11, afl-clang-lto LTO will not be build.
+Compile option AFL_TRACE_PC is deprecated, just set AFL_LLVM_INSTRUMENT=PCGUARD to activate when compiling targets 
+rm -f *.o *.so *~ a.out core core.[1-9][0-9]* .test2 test-instr .test-instr0 .test-instr1 *.dwo
+rm -f ../afl-clang-fast ../afl-llvm-pass.so ../afl-llvm-lto-whitelist.so ../afl-llvm-lto-instrumentation.so ../libLLVMInsTrim.so ../afl-llvm-rt.o ../afl-llvm-rt-32.o ../afl-llvm-rt-64.o ../compare-transform-pass.so ../split-compares-pass.so ../split-switches-pass.so ../cmplog-routines-pass.so ../cmplog-instructions-pass.so afl-common.o ../afl-clang-fast++ ../afl-clang-lto ../afl-clang-lto++ ../afl-clang*.8 ../ld ../afl-ld ../afl-llvm-rt*.o
+/Library/Developer/CommandLineTools/usr/bin/make -C gcc_plugin clean
+rm -f *.o *.so *~ a.out core core.[1-9][0-9]* test-instr .test-instr0 .test-instr1 .test2
+rm -f ../afl-gcc-fast ../afl-gcc-pass.so ../afl-gcc-rt.o afl-common.o ../afl-g++-fast ../afl-g*-fast.8
+/Library/Developer/CommandLineTools/usr/bin/make -C libdislocator clean
+rm -f *.o *.so *~ a.out core core.[1-9][0-9]*
+rm -f ../libdislocator.so
+/Library/Developer/CommandLineTools/usr/bin/make -C libtokencap clean
+rm -f *.o *.so *~ a.out core core.[1-9][0-9]*
+rm -f ../libtokencap.so
+/Library/Developer/CommandLineTools/usr/bin/make -C examples/socket_fuzzing clean
+rm -f socketfuzz32.so socketfuzz64.so
+/Library/Developer/CommandLineTools/usr/bin/make -C examples/argv_fuzzing clean
+rm -f argvfuzz32.so argvfuzz64.so
+/Library/Developer/CommandLineTools/usr/bin/make -C qemu_mode/unsigaction clean
+rm -f unsigaction32.so unsigaction64.so
+/Library/Developer/CommandLineTools/usr/bin/make -C qemu_mode/libcompcov clean
+rm -f *.o *.so *~ a.out core core.[1-9][0-9]*
+rm -f ../../libcompcov.so compcovtest
+/Library/Developer/CommandLineTools/usr/bin/make -C src/third_party/libradamsa/ clean
+rm -f libradamsa.a libradamsa.so libradamsa-test
+rm -rf unicorn_mode/unicornafl
+[*] Checking for the default compiler cc...
+[*] Checking for the ability to compile x86 code...
+[+] shmat seems to be working.
+[+] Python 3.8.6 support seems to be working.
+[+] Everything seems to be working, ready to compile.
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" src/afl-gcc.c -o afl-gcc 
+set -e; for i in afl-g++ afl-clang afl-clang++; do ln -sf afl-gcc $i; done
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" -flto=full -c src/afl-common.c -o src/afl-common.o
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" -flto=full -c src/afl-sharedmem.c -o src/afl-sharedmem.o
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" -flto=full -c src/afl-forkserver.c -o src/afl-forkserver.o
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" -flto=full src/afl-fuzz-bitmap.c src/afl-fuzz-cmplog.c src/afl-fuzz-extras.c src/afl-fuzz-init.c src/afl-fuzz-mutators.c src/afl-fuzz-one.c src/afl-fuzz-python.c src/afl-fuzz-queue.c src/afl-fuzz-redqueen.c src/afl-fuzz-run.c src/afl-fuzz-state.c src/afl-fuzz-stats.c src/afl-fuzz.c src/afl-common.o src/afl-sharedmem.o src/afl-forkserver.o -o afl-fuzz -DUSE_PYTHON -I/usr/local/Cellar/python@3.8/3.8.6/Frameworks/Python.framework/Versions/3.8/include/python3.8 -I/usr/local/Cellar/python@3.8/3.8.6/Frameworks/Python.framework/Versions/3.8/include/python3.8  -lpython3.8 -ldl -framework CoreFoundation -L/usr/local/opt/python@3.8/Frameworks/Python.framework/Versions/3.8/lib/python3.8/config-3.8-darwin -lpython3.8 -ldl -framework CoreFoundation -DPYTHON_VERSION="\"Python 3.8.6\"" 
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" -flto=full src/afl-showmap.c src/afl-common.o src/afl-sharedmem.o src/afl-forkserver.o -o afl-showmap 
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" -flto=full src/afl-tmin.c src/afl-common.o src/afl-sharedmem.o src/afl-forkserver.o -o afl-tmin 
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" src/afl-gotcpu.c src/afl-common.o -o afl-gotcpu 
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" -flto=full src/afl-analyze.c src/afl-common.o src/afl-sharedmem.o -o afl-analyze 
+cc -O3 -funroll-loops  -Wall -g -Wno-pointer-sign -Wmissing-declarations -I include/ -Werror -DAFL_PATH=\"/lib/afl\" -DBIN_PATH=\"/bin\" -DDOC_PATH=\"/share/doc/afl\" src/afl-as.c -o afl-as 
+ln -sf afl-as as
+[*] Testing the CC wrapper and instrumentation output...
+ASAN_OPTIONS=detect_leaks=0 ./afl-showmap -m none -q -o .test-instr0 ./test-instr < /dev/null
+echo 1 | ASAN_OPTIONS=detect_leaks=0 ./afl-showmap -m none -q -o .test-instr1 ./test-instr
+[+] All right, the instrumentation seems to be working!
+[+] LLVM users: see llvm_mode/README.md for a faster alternative to afl-gcc.
+[+] All done! Be sure to review the README.md - it's pretty short and useful.
+
+WARNING: Fuzzing on MacOS X is slow because of the unusually high overhead of
+fork() on this OS. Consider using Linux or *BSD. You can also use VirtualBox
+(virtualbox.org) to put AFL inside a Linux or *BSD VM.
+
+install -d -m 755 ${DESTDIR}/bin ${DESTDIR}/lib/afl ${DESTDIR}/share/doc/afl ${DESTDIR}/share/afl
+rm -f ${DESTDIR}/bin/afl-plot.sh
+install -m 755 afl-gcc afl-fuzz afl-showmap afl-tmin afl-gotcpu afl-analyze afl-plot afl-cmin afl-cmin.bash afl-whatsup afl-system-config ${DESTDIR}/bin
+rm -f ${DESTDIR}/bin/afl-as
+if [ -f afl-qemu-trace ]; then install -m 755 afl-qemu-trace ${DESTDIR}/bin; fi
+if [ -f afl-gcc-fast ]; then set e; install -m 755 afl-gcc-fast ${DESTDIR}/bin; ln -sf afl-gcc-fast ${DESTDIR}/bin/afl-g++-fast; install -m 755 afl-gcc-pass.so afl-gcc-rt.o ${DESTDIR}/lib/afl; fi
+if [ -f afl-clang-fast ]; then /Library/Developer/CommandLineTools/usr/bin/make -C llvm_mode install; fi
+if [ -f libdislocator.so ]; then set -e; install -m 755 libdislocator.so ${DESTDIR}/lib/afl; fi
+if [ -f libtokencap.so ]; then set -e; install -m 755 libtokencap.so ${DESTDIR}/lib/afl; fi
+if [ -f libcompcov.so ]; then set -e; install -m 755 libcompcov.so ${DESTDIR}/lib/afl; fi
+if [ -f libradamsa.so ]; then set -e; install -m 755 libradamsa.so ${DESTDIR}/lib/afl; fi
+if [ -f afl-fuzz-document ]; then set -e; install -m 755 afl-fuzz-document ${DESTDIR}/bin; fi
+if [ -f socketfuzz32.so -o -f socketfuzz64.so ]; then /Library/Developer/CommandLineTools/usr/bin/make -C examples/socket_fuzzing install; fi
+if [ -f argvfuzz32.so -o -f argvfuzz64.so ]; then /Library/Developer/CommandLineTools/usr/bin/make -C examples/argv_fuzzing install; fi
+set -e; ln -sf afl-gcc ${DESTDIR}/bin/afl-g++
+set -e; if [ -f afl-clang-fast ] ; then ln -sf afl-clang-fast ${DESTDIR}/bin/afl-clang ; ln -sf afl-clang-fast ${DESTDIR}/bin/afl-clang++ ; else ln -sf afl-gcc ${DESTDIR}/bin/afl-clang ; ln -sf afl-gcc ${DESTDIR}/bin/afl-clang++; fi
+mkdir -m 0755 -p /Users/laudiacay/.local/share/afl.rs/rustc-1.47.0-18bf6b4/afl.rs-0.8.0/afl/man/man8
+install -m0644 *.8 /Users/laudiacay/.local/share/afl.rs/rustc-1.47.0-18bf6b4/afl.rs-0.8.0/afl/man/man8
+install -m 755 afl-as ${DESTDIR}/lib/afl
+ln -sf afl-as ${DESTDIR}/lib/afl/as
+install -m 644 docs/*.md ${DESTDIR}/share/doc/afl
+cp -r testcases/ ${DESTDIR}/share/afl
+cp -r dictionaries/ ${DESTDIR}/share/afl
+[+] llvm_mode detected llvm < 11, afl-clang-lto LTO will not be build.
+[*] Checking for working 'llvm-config'...
+[*] Checking for working 'clang'...
+[*] Checking for matching versions of 'clang' and 'llvm-config'
+[*] We have llvm-config version  with a clang version , good.
+[*] Checking for '../afl-showmap'...
+[+] All set and ready to build.
+clang -O3 -funroll-loops -D_FORTIFY_SOURCE=2 -Wall -g -Wno-pointer-sign -I ../include/ -DAFL_PATH=\"/usr/local/lib/afl\" -DBIN_PATH=\"/usr/local/bin\" -DLLVM_BINDIR=\"\" -DVERSION=\"++2.64c\" -DLLVM_VERSION=\"\"  -DAFL_CLANG_FLTO=\"-flto=full\" -DAFL_REAL_LD=\"\" -DAFL_CLANG_FUSELD=\"1\" -DCLANG_BIN=\"clang\" -DCLANGPP_BIN=\"clang++\" -DUSE_BINDIR=0 -Wno-unused-function -Wno-unused-result -fPIC -c afl-llvm-rt.o.c -o ../afl-llvm-rt.o
