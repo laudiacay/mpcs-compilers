@@ -7,12 +7,12 @@ use std::convert::{TryFrom, TryInto};
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TCProg {
-    externs: Vec<TCExtern>,
-    funcs: Vec<TCFunc>,
+    pub externs: Vec<TCExtern>,
+    pub funcs: Vec<TCFunc>,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct TCExtern {
+pub struct TCExtern {
     pub type_: TCType,
     pub globid: String,
     pub args: Vec<TCType>,
@@ -36,7 +36,7 @@ impl TryFrom<Extern> for TCExtern {
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
-struct TCFunc {
+pub struct TCFunc {
     pub type_: TCType,
     pub globid: String,
     pub args: Vec<TCVDecl>,
@@ -132,7 +132,7 @@ fn typecheck_stmt(
             &defined_functions,
             defined_vars.clone(),
             should_return.clone(),
-            HashMap::new(),  // entering a new block allows shadowing existing vars
+            HashMap::new(), // entering a new block allows shadowing existing vars
         )?),
         Stmt::ReturnStmt(exp) => match (exp, should_return.clone()) {
             (None, None) => TCStmt::ReturnStmt(None),
@@ -157,7 +157,9 @@ fn typecheck_stmt(
                         ))?
                     }
                 } else {
-                    Err(anyhow!("reference type assigned to non-variable expression"))?
+                    Err(anyhow!(
+                        "reference type assigned to non-variable expression"
+                    ))?
                 }
             } else {
                 if exp.type_ != vdecl.type_ {

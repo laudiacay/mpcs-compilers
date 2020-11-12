@@ -17,12 +17,14 @@ serde = { version = "1.0", features = ["derive", "rc"] }
 serde_yaml = "0.8"
 anyhow = "1.0"
 clap = "2.33"
-afl = "*"
+#afl = "*"
+inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm7-0"] }
+
 
 [[bin]]
 name = "ekcc"
 path = "src/main.rs"
 
-[[bin]]
-name = "ekcc-fuzz"
-path = "src/fuzz-main.rs"
+#[[bin]]
+#name = "ekcc-fuzz"
+#path = "src/fuzz-main.rs"
