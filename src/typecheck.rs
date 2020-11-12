@@ -266,7 +266,6 @@ pub enum TCStmt {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypedExp {
-    // ifs and whiles have no type- representing unit as none
     type_: TCType,
     exp: TCExp,
 }

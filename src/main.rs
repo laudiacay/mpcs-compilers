@@ -5,13 +5,15 @@ extern crate lalrpop;
 extern crate lalrpop_util;
 mod ast;
 mod typecheck;
+mod jit;
 
 use clap::{App, Arg};
 use std::fs::{read_to_string, File};
+use anyhow::Result;
 
 lalrpop_mod!(pub kaleidoscope); // synthesized by LALRPOP
 
-fn main() {
+fn real_main() -> Result<()> {
     let matches = App::new("ekcc")
         .version("1.0")
         .author("Julian Beckman & Claudia Richoux")
@@ -20,39 +22,36 @@ fn main() {
             Arg::from_usage("-v, --verbose 'verbose mode. only warnings will be emitted otherwise for any correct inputs.'"),
             Arg::from_usage("-O 'enable optimizations'"),
             Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'").conflicts_with("emit-llvm"),
+            // turn this into jit
+            // Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'").conflicts_with("emit-llvm"),
             Arg::from_usage("--emit-llvm 'produce the LLVM IR (unoptimized unless -O is provided)'"),
             Arg::from_usage("-o <output-file> 'required output file'"),
             Arg::from_usage("<input-file> 'sets the input file to use'")
         ])
         .get_matches();
-
+    // TODO error handle correctly here
     let file_contents_str =
-        read_to_string(matches.value_of("input-file").unwrap()).expect("can't read input file");
+        read_to_string(matches.value_of("input-file").unwrap())?;
 
     let prog = kaleidoscope::ProgParser::new()
-        .parse(&file_contents_str);
+        .parse(&file_contents_str)?;
     
-    if let Err(msg) = prog {
-        println!("error: {}", msg);
-        std::process::exit(1);
-    }
-
-    let prog = prog.unwrap();
-
-    let typed_prog = typecheck::typecheck(prog);
-
-    if let Err(msg) = typed_prog {
-        println!("error: {}", msg);
-        std::process::exit(1);
-    }
-
-    let typed_prog = typed_prog.unwrap();
+    let typed_prog = typecheck::typecheck(prog)?;
 
     if matches.is_present("emit-ast") {
         let output_file = matches.value_of("o").unwrap();
         let file = File::create(output_file)
             .expect(&format!("failed to create output file at {}", output_file).to_string());
-        serde_yaml::to_writer(file, &typed_prog).expect("failed to write typed ast to file");
+        serde_yaml::to_writer(file, &typed_prog)?;
+    }
+    Ok (())
+}
+
+fn main() {
+    match real_main() {
+        Err(msg) => {println!("error: {}", msg);
+                     std::process::exit(1);},
+        Ok(t) => t,
     }
 }
 
