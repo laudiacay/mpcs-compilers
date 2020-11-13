@@ -6,13 +6,12 @@ extern crate lalrpop_util;
 mod ast;
 mod jit;
 mod typecheck;
-use anyhow::Result;
 use clap::{App, Arg};
 use std::fs::{read_to_string, File};
 
 lalrpop_mod!(pub kaleidoscope); // synthesized by LALRPOP
 
-fn real_main() -> Result<i32> {
+fn main() {
     let matches = App::new("ekcc")
         .version("1.0")
         .author("Julian Beckman & Claudia Richoux")
@@ -30,33 +29,46 @@ fn real_main() -> Result<i32> {
     let input_filename = matches.value_of("input-file").unwrap();
     let output_filename = matches.value_of("o").unwrap();
 
-    let file_contents_str = read_to_string(input_filename)?;
+    let file_contents_str = read_to_string(input_filename).expect("could not open input file");
+    let prog = kaleidoscope::ProgParser::new().parse(&file_contents_str);
+    if let Err(msg) = prog {
+        println!("error: {}", msg);
+        std::process::exit(1);
+    }
 
-    let prog = kaleidoscope::ProgParser::new().parse(&file_contents_str)?;
-    let typed_prog = typecheck::typecheck(prog)?;
+    let prog = prog.unwrap();
 
-    let out_file = File::create(output_filename)?;
+    let typed_prog = typecheck::typecheck(prog);
+    if let Err(msg) = typed_prog {
+        println!("error: {}", msg);
+        std::process::exit(1);
+    }
+
+    let typed_prog = typed_prog.unwrap();
+
+    let out_file = File::create(output_filename)
+        .expect(&format!("failed to create output file at {}", output_filename).to_string());
 
     if matches.is_present("emit-ast") {
-        serde_yaml::to_writer(out_file, &typed_prog)?;
-        Ok(1)
-    } else if matches.is_present("jit") {
-        let retcode = Ok(jit::jit(input_filename, typed_prog)?);
-        unimplemented!("output is not being redirected correctly, implement this!");
-        retcode
-    } else {
-        Ok(0)
-    }
-}
-
-fn main() {
-    std::process::exit(match real_main() {
-        Err(msg) => {
-            eprintln!("error: {}", msg);
-            -1
+        if let Err(msg) = serde_yaml::to_writer(out_file, &typed_prog) {
+            println!("error: {}", msg);
+            std::process::exit(1);
         }
-        Ok(exit_code) => exit_code,
-    })
+    } else if matches.is_present("jit") {
+        match jit::jit(input_filename, typed_prog) {
+            Err(e) => {
+                println!("error: {}", e);
+                std::process::exit(1);
+            }
+            Ok(rc) => {
+                unimplemented!("output is not being redirected correctly, implement this!");
+
+                std::process::exit(rc);
+            }
+        }
+    } else {
+        unimplemented!("use either emit-ast or jit...");
+    }
 }
 
 #[cfg(test)]
