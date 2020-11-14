@@ -158,12 +158,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     fn lift_exp(&self, exp: TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         match exp.type_ {
             TCType::AtomType(tca) => {
-                match tca {
-                    IntType => self.lift_exp_to_int(exp.exp),
-                    CIntType => self.lift_exp_to_int(exp.exp), // still not doing anything with this
-                    FloatType => self.lift_exp_to_float(exp.exp),
-                    BoolType => unimplemented!("booleans are weird, maybe"),
-                }
+                self.lift_tcexp(exp.exp)
             }
             TCType::VoidType => self.lift_exp_to_void(exp.exp),
             _ => unimplemented!("Ref types not implemented!")
@@ -199,22 +194,14 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         Ok(None)
     }
 
-    fn lift_exp_to_float(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
-        unimplemented!("todo")
-    }
-
-    fn lift_exp_to_int(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+    fn lift_tcexp(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         let val = match exp {
             TCExp::Assign{ varid, exp } => {
-                let ass_val = self.lift_exp(*exp);
+                let ass_val = self.lift_exp(*exp)?.unwrap();
                 let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap(); // variable verified by typechecker already
 
-                if let Ok(Some(ass_val)) = ass_val {
-                    self.main_builder.build_store(*var, ass_val);
-                    ass_val
-                } else {
-                    Err(anyhow!("could not build store"))?
-                }
+                self.main_builder.build_store(*var, ass_val);
+                ass_val
             },
             TCExp::Cast{ type_, exp } => {
                 // if casting to/from voids isn't caught by our typechecker im leaving this planet
@@ -231,52 +218,84 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 let lifted_lhs = self.lift_exp(*lhs)?.unwrap();
                 let lifted_rhs = self.lift_exp(*rhs)?.unwrap();
 
-                if let (BasicValueEnum::IntValue(lhs_val), BasicValueEnum::IntValue(rhs_val)) = (lifted_lhs, lifted_rhs) {
-                    match op {
-                        BOp::Add => {
-                            BasicValueEnum::IntValue(self.main_builder.build_int_add(lhs_val, rhs_val, "add"))
-                        },
-                        BOp::Sub => {
-                            BasicValueEnum::IntValue(self.main_builder.build_int_sub(lhs_val, rhs_val, "sub"))
-                        },
-                        BOp::Mult => {
-                            BasicValueEnum::IntValue(self.main_builder.build_int_mul(lhs_val, rhs_val, "mul"))
-                        },
-                        BOp::Div => {
-                            // signed division I guess?
-                            BasicValueEnum::IntValue(self.main_builder.build_int_signed_div(lhs_val, rhs_val, "add"))
-                        },
-
-                        // TODO need to handle more bops if this is used for more than just int
-                        // expressions
-                        _ => Err(anyhow!("illegal binop in int-type expression"))?
+                match (lifted_lhs, lifted_rhs) {
+                    (BasicValueEnum::IntValue(lhs_val), BasicValueEnum::IntValue(rhs_val)) => {
+                        match op {
+                            BOp::Add => {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_add(lhs_val, rhs_val, "add"))
+                            },
+                            BOp::Sub => {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_sub(lhs_val, rhs_val, "sub"))
+                            },
+                            BOp::Mult => {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_mul(lhs_val, rhs_val, "mul"))
+                            },
+                            BOp::Div => {
+                                // signed division I guess?
+                                BasicValueEnum::IntValue(self.main_builder.build_int_signed_div(lhs_val, rhs_val, "div"))
+                            },
+                            // TODO probably handing boolean ops here
+                            _ => Err(anyhow!("illegal binop in int-type expression"))?
+                        }
+                    },
+                    (BasicValueEnum::FloatValue(lhs_val), BasicValueEnum::FloatValue(rhs_val)) => {
+                        match op {
+                            BOp::Add => {
+                                BasicValueEnum::FloatValue(self.main_builder.build_float_add(lhs_val, rhs_val, "add"))
+                            },
+                            BOp::Sub => {
+                                BasicValueEnum::FloatValue(self.main_builder.build_float_sub(lhs_val, rhs_val, "sub"))
+                            },
+                            BOp::Mult => {
+                                BasicValueEnum::FloatValue(self.main_builder.build_float_mul(lhs_val, rhs_val, "mul"))
+                            },
+                            BOp::Div => {
+                                BasicValueEnum::FloatValue(self.main_builder.build_float_div(lhs_val, rhs_val, "div"))
+                            },
+                            // TODO probably handing boolean ops here
+                            _ => Err(anyhow!("illegal binop in int-type expression"))?
+                        }
                     }
-                } else {
-                    Err(anyhow!("non-int values in int-typed binop expression"))?
+                    // should be unreachable due to typechecker
+                    _ => Err(anyhow!("illegal binop in int-type expression"))?
                 }
             },
             TCExp::UnaryOp{ op, exp }  => {
                 let lifted_exp = self.lift_exp(*exp)?.unwrap();
 
-                // TODO handle BitwiseNeg if using this function for bools
-                if let BasicValueEnum::IntValue(val) = lifted_exp {
-                    match op {
-                        UOp::SignedNeg => {
-                            BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "add"))
+                match lifted_exp {
+                    BasicValueEnum::IntValue(val) => {
+                        match op {
+                            UOp::SignedNeg => {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "neg"))
+                            }
+                            UOp::BitwiseNeg => {
+                                BasicValueEnum::IntValue(self.main_builder.build_not(val, "not"))
+                            }
                         }
-                        _ => Err(anyhow!("invalid op in int-typed unary expression"))?
-                    }
-                } else {
-                    Err(anyhow!("invalid value in int-typed unary expression"))?
+                    },
+                    BasicValueEnum::FloatValue(val) => {
+                        match op {
+                            UOp::SignedNeg => {
+                                BasicValueEnum::FloatValue(self.main_builder.build_float_neg(val, "neg"))
+                            }
+                            _ => Err(anyhow!("invalid op in float-typed unary expression"))?
+                        }
+                    },
+                    _ => Err(anyhow!("invalid value in unary expression"))?
                 }
             },
             TCExp::Literal(lit) => {
                 match lit {
-                    // TODO add more cases if this function does more than ints
                     Lit::LitInt(i) => {
                         BasicValueEnum::IntValue(self.context.i32_type().const_int(i as u64, true))
-                    }
-                    _ => Err(anyhow!("bad literal passed to expression compiler"))?
+                    },
+                    Lit::LitFloat(i) => {
+                        BasicValueEnum::FloatValue(self.context.f64_type().const_float(i))
+                    },
+                    Lit::LitBool(i) => {
+                        BasicValueEnum::IntValue(self.context.bool_type().const_int(i as u64, true))
+                    },
                 }
             },
             TCExp::VarVal(varid) => {
@@ -300,7 +319,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
                 let call = self.main_builder.build_call(func, args_arr.as_slice(), "call");
                 match call.try_as_basic_value().left() {
-                    Some(val) => BasicValueEnum::IntValue(val.into_int_value()),
+                    Some(val) => val,
                     None => Err(anyhow!("invalid function call"))?
                 }
             },
