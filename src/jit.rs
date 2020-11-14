@@ -1,11 +1,12 @@
-use crate::typecheck::{TCAtomType, TCExtern, TCFunc, TCProg, TCType};
+use crate::typecheck::{TCAtomType, TCExp, TCExtern, TCFunc, TCProg, TCType, TypedExp};
+use crate::ast::{BOp, UOp, Lit};
 use anyhow::{anyhow, Result};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{FunctionValue, PointerValue};
+use inkwell::values::{FunctionValue, PointerValue, BasicValueEnum, InstructionOpcode};
 use inkwell::AddressSpace;
 use inkwell::OptimizationLevel;
 use std::collections::HashMap;
@@ -20,22 +21,31 @@ use std::collections::HashMap;
 //    a + b
 //}
 
-/*#[no_mangle]
+/*
+#[no_mangle]
 pub extern "C" fn kaleido_println() {
     println!("{:?}\n", x as u8 as char);
 }
-#[no_mangle]
-pub extern "C" fn arg() {
-    println!("{:?}\n", x as u8 as char);
-}
-#[no_mangle]
-pub extern "C" fn argf() -> {
-    println!("{:?}\n", x as u8 as char);
-}
-// making sure rustc doesn't remove kaleido_println
-#[used]
-static EXTERNAL_FNS: [extern fn(f64) -> f64; 1] = [kaleido_println];
 */
+
+#[no_mangle]
+pub extern "C" fn arg(i: i32) -> i32 {
+    4
+}
+
+#[no_mangle]
+pub extern "C" fn argf(i: i32) -> f64 {
+    4.0
+}
+
+
+// making sure rustc doesn't remove arg and argf
+#[used]
+static EXTERNAL_FNS1: [extern fn(i32) -> i32; 1] = [arg];
+
+#[used]
+static EXTERNAL_FNS2: [extern fn(i32) -> f64; 1] = [argf];
+
 // TODO i have fucked up the lifetimes and am keeping shit around way too long
 struct JitDoer<'ctx> {
     context: &'ctx Context,
@@ -144,6 +154,160 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         Ok(())
     }
 
+    // check the type of an expression and get its value
+    fn lift_exp(&self, exp: TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+        match exp.type_ {
+            TCType::AtomType(tca) => {
+                match tca {
+                    IntType => self.lift_exp_to_int(exp.exp),
+                    CIntType => self.lift_exp_to_int(exp.exp), // still not doing anything with this
+                    FloatType => self.lift_exp_to_float(exp.exp),
+                    BoolType => unimplemented!("booleans are weird, maybe"),
+                }
+            }
+            TCType::VoidType => self.lift_exp_to_void(exp.exp),
+            _ => unimplemented!("Ref types not implemented!")
+        }
+    }
+
+    fn lift_exp_to_void(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+        if let TCExp::FuncCall{ globid, exps } = exp {
+            let func_opt = self.module.get_function(globid.as_str());
+            if let None = func_opt {
+                // should be unreachable, as this would be caught during typechecking
+                Err(anyhow!("unknown function"))?;
+            }
+            let func = func_opt.unwrap();
+            
+            // lift args
+            let mut args = vec![];
+            for e in exps {
+                args.push(self.lift_exp(e)?);
+            }
+
+            // build call using lifted args
+            // unwrap is safe here because typechecker guarantees function arguments are not void
+            let args_arr = args.iter().by_ref().map(|&val| val.unwrap().into()).collect::<Vec<BasicValueEnum>>();
+
+            // don't need to save the value as this is only called for void functions
+            // but do we need to check if the call itself is valid?
+            self.main_builder.build_call(func, args_arr.as_slice(), "call"); // wtf is the 'name' supposed to be
+        } else {
+            // should be unreachable
+            Err(anyhow!("found expression of void type other than function call"))?;
+        }
+        Ok(None)
+    }
+
+    fn lift_exp_to_float(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+        unimplemented!("todo")
+    }
+
+    fn lift_exp_to_int(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+        let val = match exp {
+            TCExp::Assign{ varid, exp } => {
+                let ass_val = self.lift_exp(*exp);
+                let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap(); // variable verified by typechecker already
+
+                if let Ok(Some(ass_val)) = ass_val {
+                    self.main_builder.build_store(*var, ass_val);
+                    ass_val
+                } else {
+                    Err(anyhow!("could not build store"))?
+                }
+            },
+            TCExp::Cast{ type_, exp } => {
+                // if casting to/from voids isn't caught by our typechecker im leaving this planet
+                let lifted_exp = self.lift_exp(*exp)?.unwrap();
+                let lifted_type = self.lift_type(type_)?.unwrap();
+                
+                // I have no idea if it makes sense to use this or build_int_cast
+                // from https://llvm.org/docs/LangRef.html#bitcast-to-instruction bitcast means to
+                // cast w/o changing any bits
+                let cast = self.main_builder.build_cast(InstructionOpcode::BitCast, lifted_exp, lifted_type, "cast");
+                cast    
+            },
+            TCExp::BinOp{ op, lhs, rhs } => {
+                let lifted_lhs = self.lift_exp(*lhs)?.unwrap();
+                let lifted_rhs = self.lift_exp(*rhs)?.unwrap();
+
+                if let (BasicValueEnum::IntValue(lhs_val), BasicValueEnum::IntValue(rhs_val)) = (lifted_lhs, lifted_rhs) {
+                    match op {
+                        BOp::Add => {
+                            BasicValueEnum::IntValue(self.main_builder.build_int_add(lhs_val, rhs_val, "add"))
+                        },
+                        BOp::Sub => {
+                            BasicValueEnum::IntValue(self.main_builder.build_int_sub(lhs_val, rhs_val, "sub"))
+                        },
+                        BOp::Mult => {
+                            BasicValueEnum::IntValue(self.main_builder.build_int_mul(lhs_val, rhs_val, "mul"))
+                        },
+                        BOp::Div => {
+                            // signed division I guess?
+                            BasicValueEnum::IntValue(self.main_builder.build_int_signed_div(lhs_val, rhs_val, "add"))
+                        },
+
+                        // TODO need to handle more bops if this is used for more than just int
+                        // expressions
+                        _ => Err(anyhow!("illegal binop in int-type expression"))?
+                    }
+                } else {
+                    Err(anyhow!("non-int values in int-typed binop expression"))?
+                }
+            },
+            TCExp::UnaryOp{ op, exp }  => {
+                let lifted_exp = self.lift_exp(*exp)?.unwrap();
+
+                // TODO handle BitwiseNeg if using this function for bools
+                if let BasicValueEnum::IntValue(val) = lifted_exp {
+                    match op {
+                        UOp::SignedNeg => {
+                            BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "add"))
+                        }
+                        _ => Err(anyhow!("invalid op in int-typed unary expression"))?
+                    }
+                } else {
+                    Err(anyhow!("invalid value in int-typed unary expression"))?
+                }
+            },
+            TCExp::Literal(lit) => {
+                match lit {
+                    // TODO add more cases if this function does more than ints
+                    Lit::LitInt(i) => {
+                        BasicValueEnum::IntValue(self.context.i32_type().const_int(i as u64, true))
+                    }
+                    _ => Err(anyhow!("bad literal passed to expression compiler"))?
+                }
+            },
+            TCExp::VarVal(varid) => {
+                // typechecker makes sure variable is in scope here
+                let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap();
+                BasicValueEnum::IntValue(self.main_builder.build_load(*var, varid.as_str()).into_int_value())
+            },
+            TCExp::FuncCall{ globid, exps } => {
+                // missing function caught during typechecking
+                let func = self.module.get_function(globid.as_str()).unwrap();
+                
+                // lift args
+                let mut args = vec![];
+                for e in exps {
+                    args.push(self.lift_exp(e)?);
+                }
+
+                // build call using lifted args
+                // unwrap is safe here because typechecker guarantees function arguments are not void
+                let args_arr = args.iter().by_ref().map(|&val| val.unwrap().into()).collect::<Vec<BasicValueEnum>>();
+
+                let call = self.main_builder.build_call(func, args_arr.as_slice(), "call");
+                match call.try_as_basic_value().left() {
+                    Some(val) => BasicValueEnum::IntValue(val.into_int_value()),
+                    None => Err(anyhow!("invalid function call"))?
+                }
+            },
+        };
+        Ok(Some(val))
+    }
+
     fn lift_type(&self, type_: TCType) -> Result<Option<BasicTypeEnum<'ctx>>> {
         Ok(match type_ {
             TCType::AtomType(type_) => Some(self.lift_atom_type(type_)?),
@@ -156,6 +320,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             ),
         })
     }
+
     fn lift_atom_type(&self, type_: TCAtomType) -> Result<BasicTypeEnum<'ctx>> {
         Ok(match type_ {
             TCAtomType::IntType => self.context.i32_type().into(),

@@ -268,8 +268,8 @@ pub enum TCStmt {
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
 pub struct TypedExp {
-    type_: TCType,
-    exp: TCExp,
+    pub type_: TCType,
+    pub exp: TCExp,
 }
 
 #[derive(Debug, PartialEq, Serialize, Deserialize)]
