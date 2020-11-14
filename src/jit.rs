@@ -7,8 +7,7 @@ use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{FunctionValue, PointerValue, BasicValueEnum, InstructionOpcode};
-use inkwell::AddressSpace;
-use inkwell::OptimizationLevel;
+use inkwell::{AddressSpace, OptimizationLevel, IntPredicate, FloatPredicate};
 use std::collections::HashMap;
 // may need pub fn set_triple(&self, triple: &TargetTriple)
 // pub fn write_bitcode_to_path(&self, path: &Path) -> bool
@@ -161,7 +160,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 self.lift_tcexp(exp.exp)
             }
             TCType::VoidType => self.lift_exp_to_void(exp.exp),
-            _ => unimplemented!("Ref types not implemented!")
+            _ => Err(anyhow!("typed expression with reference type (likely a bug)"))?,
         }
     }
 
@@ -231,11 +230,23 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                                 BasicValueEnum::IntValue(self.main_builder.build_int_mul(lhs_val, rhs_val, "mul"))
                             },
                             BOp::Div => {
-                                // signed division I guess?
                                 BasicValueEnum::IntValue(self.main_builder.build_int_signed_div(lhs_val, rhs_val, "div"))
                             },
-                            // TODO probably handing boolean ops here
-                            _ => Err(anyhow!("illegal binop in int-type expression"))?
+                            BOp::EqTo => {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq"))
+                            },
+                            BOp::Gt => {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(IntPredicate::SGT, lhs_val, rhs_val, "gt"))
+                            },
+                            BOp::Lt => {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(IntPredicate::SLT, lhs_val, rhs_val, "lt"))
+                            },
+                            BOp::And => {
+                                BasicValueEnum::IntValue(self.main_builder.build_and(lhs_val, rhs_val, "and"))
+                            },
+                            BOp::Or => {
+                                BasicValueEnum::IntValue(self.main_builder.build_or(lhs_val, rhs_val, "or"))
+                            },
                         }
                     },
                     (BasicValueEnum::FloatValue(lhs_val), BasicValueEnum::FloatValue(rhs_val)) => {
@@ -252,12 +263,20 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                             BOp::Div => {
                                 BasicValueEnum::FloatValue(self.main_builder.build_float_div(lhs_val, rhs_val, "div"))
                             },
-                            // TODO probably handing boolean ops here
-                            _ => Err(anyhow!("illegal binop in int-type expression"))?
+                            BOp::EqTo => {
+                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(FloatPredicate::UEQ, lhs_val, rhs_val, "eq"))
+                            },
+                            BOp::Gt => {
+                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(FloatPredicate::UGT, lhs_val, rhs_val, "gt"))
+                            },
+                            BOp::Lt => {
+                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(FloatPredicate::ULT, lhs_val, rhs_val, "lt"))
+                            },
+                            _ => Err(anyhow!("illegal operation on float values (most likely 'and' or 'or')"))?
                         }
                     }
                     // should be unreachable due to typechecker
-                    _ => Err(anyhow!("illegal binop in int-type expression"))?
+                    _ => Err(anyhow!("illegal binop in int-type expression (likely a bug)"))?
                 }
             },
             TCExp::UnaryOp{ op, exp }  => {
@@ -301,7 +320,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             TCExp::VarVal(varid) => {
                 // typechecker makes sure variable is in scope here
                 let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap();
-                BasicValueEnum::IntValue(self.main_builder.build_load(*var, varid.as_str()).into_int_value())
+                self.main_builder.build_load(*var, varid.as_str())
             },
             TCExp::FuncCall{ globid, exps } => {
                 // missing function caught during typechecking
