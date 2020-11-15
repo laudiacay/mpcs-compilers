@@ -1,4 +1,4 @@
-use crate::typecheck::{TCAtomType, TCExp, TCExtern, TCFunc, TCProg, TCType, TypedExp};
+use crate::typecheck::{TCAtomType, TCExp, TCExtern, TCFunc, TCProg, TCStmt, TCType, TypedExp};
 use crate::ast::{BOp, UOp, Lit};
 use anyhow::{anyhow, Result};
 use inkwell::builder::Builder;
@@ -6,7 +6,7 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{FunctionValue, PointerValue, BasicValueEnum, InstructionOpcode};
+use inkwell::values::{FunctionValue, PointerValue, BasicValueEnum, BasicValue, InstructionOpcode};
 use inkwell::{AddressSpace, OptimizationLevel, IntPredicate, FloatPredicate};
 use std::collections::HashMap;
 // may need pub fn set_triple(&self, triple: &TargetTriple)
@@ -150,6 +150,83 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         }
         //TODO: i parse the BasicBlock and add it
 
+        Ok(())
+    }
+
+    fn lift_stmt(&self, stmt: TCStmt) -> Result <()> {
+        match stmt {
+            TCStmt::Blk(blk) => unimplemented!("how do scopes work"),
+            TCStmt::ReturnStmt(ret) => {
+                match ret {
+                    Some(ret) => {
+                        // unwrapping and rewrapping because of some referencing bullshit
+                        // unwrap can't fail because return expression can't be void and the
+                        // typechecker confirms this
+                        let lifted_ret = self.lift_exp(ret)?.unwrap();
+                        self.main_builder.build_return(Some(&lifted_ret));
+                    },
+                    None => {
+                        self.main_builder.build_return(None);
+                    }
+                }
+            },
+            TCStmt::VDeclStmt{ vdecl, exp } => unimplemented!("todo"),
+            TCStmt::ExpStmt(exp) => {
+                self.lift_exp(exp)?;
+            },
+            TCStmt::WhileStmt{ cond, stmt: body } => {
+                // unwrapping this means that a while statement can only be encountered within a
+                // function body, which is right
+                let parent = self.current_fn_being_compiled.unwrap();
+                let lifted_cond = self.lift_exp(cond)?.unwrap().into_int_value();
+                let loop_bb = self.context.append_basic_block(parent, "loop"); // loop body
+                let post_bb = self.context.append_basic_block(parent, "endwhile"); // end of loop
+
+                // check condition to see whether to enter loop at all
+                self.main_builder.build_conditional_branch(lifted_cond, loop_bb, post_bb);
+
+                // execute body and check condition again
+                self.main_builder.position_at_end(loop_bb);
+                self.lift_stmt(*body);
+                self.main_builder.build_conditional_branch(lifted_cond, loop_bb, post_bb);
+
+                // end of loop
+                self.main_builder.position_at_end(post_bb);
+            },
+            TCStmt::IfStmt{ cond, stmt: body, else_stmt } => {
+                let parent = self.current_fn_being_compiled.unwrap();
+                let lifted_cond = self.lift_exp(cond)?.unwrap().into_int_value();
+                let body_bb = self.context.append_basic_block(parent, "if");
+
+                // tried to do this with map but that moves else_stmt
+                let mut else_bb = None;
+                if let Some(_) = else_stmt{
+                    else_bb = Some(self.context.append_basic_block(parent, "else"));
+                }
+
+                let post_bb = self.context.append_basic_block(parent, "endif");
+
+                match else_bb {
+                    Some(else_bb) => self.main_builder.build_conditional_branch(lifted_cond, body_bb, else_bb),
+                    None => self.main_builder.build_conditional_branch(lifted_cond, body_bb, post_bb)
+                };
+
+                self.main_builder.position_at_end(body_bb);
+                self.lift_stmt(*body);
+                self.main_builder.build_unconditional_branch(post_bb);
+
+                
+                if let Some(else_bb) = else_bb {
+                    self.main_builder.position_at_end(else_bb);
+                    self.lift_stmt(*else_stmt.unwrap());
+                    self.main_builder.build_unconditional_branch(post_bb);
+                };
+
+                self.main_builder.position_at_end(post_bb);
+            },
+            TCStmt::PrintStmt(exp) => unimplemented!("todo"),
+            TCStmt::PrintStmtSlit(strlit) => unimplemented!("todo"),
+        };
         Ok(())
     }
 
