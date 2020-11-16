@@ -1,2 +1,0 @@
-cargo:rustc-env=TYPENUM_BUILD_CONSTS=/Users/laudiacay/schoolwork/mpcs-compilers/target/release/build/typenum-c4134109837441a0/out/consts.rs
-cargo:rustc-env=TYPENUM_BUILD_OP=/Users/laudiacay/schoolwork/mpcs-compilers/target/release/build/typenum-c4134109837441a0/out/op.rs

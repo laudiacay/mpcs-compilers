@@ -1,7 +1,0 @@
-GNUmakefile:52: [!] llvm_mode needs llvm-config, which was not found
-GNUmakefile:78: llvm_mode will not compile with Xcode clang...
-GNUmakefile:96: we have trouble finding clang/clang++ - llvm-config is not helping us
-warning: (x86_64) /tmp/lto.o unable to open object file: No such file or directory
-GNUmakefile:52: [!] llvm_mode needs llvm-config, which was not found
-GNUmakefile:78: llvm_mode will not compile with Xcode clang...
-GNUmakefile:96: we have trouble finding clang/clang++ - llvm-config is not helping us
