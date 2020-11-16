@@ -114,7 +114,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             let args: Vec<BasicTypeEnum> = vec![arg_type.clone()];
             let fn_type = void_type.fn_type(args.as_slice(), false);
             self.module
-                .add_function(fn_name, fn_type, Some(Linkage::ExternalWeak));
+                .add_function(fn_name, fn_type, Some(Linkage::Private));
         }
     }
 
@@ -188,6 +188,15 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             .as_ref()
             .unwrap()
             .position_at_end(function_block);
+
+        for (i, arg) in fn_.get_param_iter().enumerate() {
+            let arg_name = func.args[i].varid.clone();
+            let arg_type = func.args[i].type_.clone();
+            let alloca = self.add_var_spot_to_fn_stack_frame(args[i], arg_type, arg_name)?;
+            self.main_builder.build_store(alloca, arg);
+        }
+
+        /*
         for (i, arg) in args.iter().enumerate() {
             // add space for each argument to the builder
             self.add_var_spot_to_fn_stack_frame(
@@ -197,6 +206,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             )?;
             // TODO store the arguments?
         }
+        */
 
         self.lift_stmt(&TCStmt::Blk(func.blk))
     }
