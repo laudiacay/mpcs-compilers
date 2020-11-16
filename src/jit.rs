@@ -6,7 +6,7 @@ use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{FunctionValue, PointerValue, BasicValueEnum, BasicValue, InstructionOpcode};
+use inkwell::values::{FunctionValue, PointerValue, BasicValueEnum, InstructionOpcode};
 use inkwell::{AddressSpace, OptimizationLevel, IntPredicate, FloatPredicate};
 use std::collections::HashMap;
 // may need pub fn set_triple(&self, triple: &TargetTriple)
@@ -55,7 +55,7 @@ struct JitDoer<'ctx> {
     current_fn_being_compiled: Option<FunctionValue<'ctx>>,
     // unsure if this remains correct after like injecting instructions... hm
     current_fn_vdecl_builder: Option<Builder<'ctx>>,
-    current_fn_stack_variables: HashMap<String, PointerValue<'ctx>>,
+    current_fn_stack_variables: HashMap<String, (PointerValue<'ctx>, TCType)>,
 }
 
 impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
@@ -79,6 +79,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     fn add_var_spot_to_fn_stack_frame(
         &mut self,
         argtype: BasicTypeEnum<'ctx>,
+        tctype: TCType,
         varname: String,
     ) -> Result<PointerValue<'ctx>> {
         let bldr = self
@@ -91,7 +92,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             BasicTypeEnum::PointerType(pt) => bldr.build_alloca(pt, &varname),
             _ => Err(anyhow!("unsupported argument type to add to stack frame"))?,
         };
-        self.current_fn_stack_variables.insert(varname, var_spot);
+        self.current_fn_stack_variables.insert(varname, (var_spot, tctype));
         Ok(var_spot)
     }
 
@@ -146,16 +147,37 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             .position_at_end(function_block);
         for (i, arg) in args.iter().enumerate() {
             // add space for each argument to the builder
-            self.add_var_spot_to_fn_stack_frame(*arg, func.args[i].varid.clone())?;
+            self.add_var_spot_to_fn_stack_frame(*arg, func.args[i].type_.clone(), func.args[i].varid.clone())?;
         }
         //TODO: i parse the BasicBlock and add it
 
         Ok(())
     }
 
-    fn lift_stmt(&self, stmt: TCStmt) -> Result <()> {
+    fn lift_stmt(&mut self, stmt: &TCStmt) -> Result <()> {
         match stmt {
-            TCStmt::Blk(blk) => unimplemented!("how do scopes work"),
+            TCStmt::Blk(blk) => {
+                /*
+                 * int x = 4;
+                 * int y = 5;
+                 * ref int z = x;
+                 * {
+                 *   int x = 7;
+                 *   y = 9;
+                 *   z; // 4
+                 * }
+                 * x; // 4
+                 * y; // 9
+                 * z; // 4
+                 */
+                let parent_block_scope = self.current_fn_stack_variables.clone();
+
+                for inner_stmt in blk.stmts.iter() {
+                    self.lift_stmt(inner_stmt)?;
+                }
+
+                self.current_fn_stack_variables = parent_block_scope;
+            },
             TCStmt::ReturnStmt(ret) => {
                 match ret {
                     Some(ret) => {
@@ -170,7 +192,27 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     }
                 }
             },
-            TCStmt::VDeclStmt{ vdecl, exp } => unimplemented!("todo"),
+            TCStmt::VDeclStmt{ vdecl, exp } => {
+                let lifted_type = self.lift_type(vdecl.type_)?.unwrap();
+                let var = self.add_var_spot_to_fn_stack_frame(lifted_type, vdecl.type_, vdecl.varid.clone())?;
+
+                if let TCType::Ref(_,_) = vdecl.type_ {
+                    if let TCExp::VarVal(tar_varid) = &exp.exp {
+                        let (tar_ptr, tar_type) = self.current_fn_stack_variables.get(&tar_varid.clone()).unwrap(); 
+                        if let TCType::Ref(_,_) = tar_type {
+                            let val = self.main_builder.build_load(*tar_ptr, "load");
+                            self.main_builder.build_store(var, val);
+                        } else {
+                            self.main_builder.build_store(var, *tar_ptr);
+                        }
+                    } else {
+                        Err(anyhow!("reference type assigned to non-variable (likely bug in typechecker)"))?
+                    }
+                } else {
+                    let lifted_exp = self.lift_exp(exp)?.unwrap();
+                    self.main_builder.build_store(var, lifted_exp);
+                }
+            },
             TCStmt::ExpStmt(exp) => {
                 self.lift_exp(exp)?;
             },
@@ -187,7 +229,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
                 // execute body and check condition again
                 self.main_builder.position_at_end(loop_bb);
-                self.lift_stmt(*body);
+                self.lift_stmt(body)?;
                 self.main_builder.build_conditional_branch(lifted_cond, loop_bb, post_bb);
 
                 // end of loop
@@ -212,13 +254,13 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 };
 
                 self.main_builder.position_at_end(body_bb);
-                self.lift_stmt(*body);
+                self.lift_stmt(body)?;
                 self.main_builder.build_unconditional_branch(post_bb);
 
                 
                 if let Some(else_bb) = else_bb {
                     self.main_builder.position_at_end(else_bb);
-                    self.lift_stmt(*else_stmt.unwrap());
+                    self.lift_stmt(&else_stmt.as_ref().unwrap())?;
                     self.main_builder.build_unconditional_branch(post_bb);
                 };
 
@@ -231,17 +273,17 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     }
 
     // check the type of an expression and get its value
-    fn lift_exp(&self, exp: TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+    fn lift_exp(&self, exp: &TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         match exp.type_ {
             TCType::AtomType(tca) => {
-                self.lift_tcexp(exp.exp)
+                self.lift_tcexp(&exp.exp)
             }
-            TCType::VoidType => self.lift_exp_to_void(exp.exp),
+            TCType::VoidType => self.lift_exp_to_void(&exp.exp),
             _ => Err(anyhow!("typed expression with reference type (likely a bug)"))?,
         }
     }
 
-    fn lift_exp_to_void(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+    fn lift_exp_to_void(&self, exp: &TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         if let TCExp::FuncCall{ globid, exps } = exp {
             let func_opt = self.module.get_function(globid.as_str());
             if let None = func_opt {
@@ -253,7 +295,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             // lift args
             let mut args = vec![];
             for e in exps {
-                args.push(self.lift_exp(e)?);
+                args.push(self.lift_exp(&e)?);
             }
 
             // build call using lifted args
@@ -270,19 +312,25 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         Ok(None)
     }
 
-    fn lift_tcexp(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+    fn lift_tcexp(&self, exp: &TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         let val = match exp {
             TCExp::Assign{ varid, exp } => {
-                let ass_val = self.lift_exp(*exp)?.unwrap();
-                let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap(); // variable verified by typechecker already
+                let ass_val = self.lift_exp(&exp)?.unwrap();
+                let (var, type_) = self.current_fn_stack_variables.get(varid.as_str()).unwrap(); // variable verified by typechecker already
 
-                self.main_builder.build_store(*var, ass_val);
+                if let TCType::Ref(_,_) = type_ {
+                    let ptr = self.main_builder.build_load(*var, "load");
+                    self.main_builder.build_store(ptr.into_pointer_value(), ass_val);
+                } else {
+                    self.main_builder.build_store(*var, ass_val);
+                }
+
                 ass_val
             },
             TCExp::Cast{ type_, exp } => {
                 // if casting to/from voids isn't caught by our typechecker im leaving this planet
-                let lifted_exp = self.lift_exp(*exp)?.unwrap();
-                let lifted_type = self.lift_type(type_)?.unwrap();
+                let lifted_exp = self.lift_exp(&exp)?.unwrap();
+                let lifted_type = self.lift_type(*type_)?.unwrap();
                 
                 // I have no idea if it makes sense to use this or build_int_cast
                 // from https://llvm.org/docs/LangRef.html#bitcast-to-instruction bitcast means to
@@ -291,8 +339,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 cast    
             },
             TCExp::BinOp{ op, lhs, rhs } => {
-                let lifted_lhs = self.lift_exp(*lhs)?.unwrap();
-                let lifted_rhs = self.lift_exp(*rhs)?.unwrap();
+                let lifted_lhs = self.lift_exp(&lhs)?.unwrap();
+                let lifted_rhs = self.lift_exp(&rhs)?.unwrap();
 
                 match (lifted_lhs, lifted_rhs) {
                     (BasicValueEnum::IntValue(lhs_val), BasicValueEnum::IntValue(rhs_val)) => {
@@ -357,7 +405,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 }
             },
             TCExp::UnaryOp{ op, exp }  => {
-                let lifted_exp = self.lift_exp(*exp)?.unwrap();
+                let lifted_exp = self.lift_exp(&exp)?.unwrap();
 
                 match lifted_exp {
                     BasicValueEnum::IntValue(val) => {
@@ -384,20 +432,20 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             TCExp::Literal(lit) => {
                 match lit {
                     Lit::LitInt(i) => {
-                        BasicValueEnum::IntValue(self.context.i32_type().const_int(i as u64, true))
+                        BasicValueEnum::IntValue(self.context.i32_type().const_int(*i as u64, true))
                     },
                     Lit::LitFloat(i) => {
-                        BasicValueEnum::FloatValue(self.context.f64_type().const_float(i))
+                        BasicValueEnum::FloatValue(self.context.f64_type().const_float(*i))
                     },
                     Lit::LitBool(i) => {
-                        BasicValueEnum::IntValue(self.context.bool_type().const_int(i as u64, true))
+                        BasicValueEnum::IntValue(self.context.bool_type().const_int(*i as u64, true))
                     },
                 }
             },
             TCExp::VarVal(varid) => {
                 // typechecker makes sure variable is in scope here
-                let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap();
-                self.main_builder.build_load(*var, varid.as_str())
+                let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap().0;
+                self.main_builder.build_load(var, varid.as_str())
             },
             TCExp::FuncCall{ globid, exps } => {
                 // missing function caught during typechecking
@@ -406,7 +454,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 // lift args
                 let mut args = vec![];
                 for e in exps {
-                    args.push(self.lift_exp(e)?);
+                    args.push(self.lift_exp(&e)?);
                 }
 
                 // build call using lifted args

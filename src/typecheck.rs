@@ -597,7 +597,7 @@ pub struct TCVDecl {
     pub varid: String,
 }
 
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
+#[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Copy)]
 pub enum TCType {
     AtomType(TCAtomType),
     VoidType,
