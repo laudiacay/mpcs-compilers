@@ -9,6 +9,7 @@ use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, InstructionOpcode, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
 use std::collections::HashMap;
+use std::path::Path;
 // may need pub fn set_triple(&self, triple: &TargetTriple)
 // pub fn write_bitcode_to_path(&self, path: &Path) -> bool
 //pub fn write_bitcode_to_memory(&self) -> MemoryBuffer
@@ -176,11 +177,11 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         };
         let fn_ =
             self.module
-                .add_function(&func.globid.clone(), fn_type, Some(Linkage::ExternalWeak));
+                .add_function(&func.globid.clone(), fn_type, None);
 
         self.current_fn_being_compiled = Some(fn_);
         self.current_fn_stack_variables = HashMap::new();
-        let function_block = self.context.append_basic_block(fn_, "fnblock");
+        let function_block = self.context.append_basic_block(fn_, "entry");
         self.main_builder.position_at_end(function_block);
         self.current_fn_vdecl_builder = Some(self.context.create_builder());
         self.current_fn_vdecl_builder
@@ -194,8 +195,9 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 func.args[i].type_.clone(),
                 func.args[i].varid.clone(),
             )?;
+            // TODO store the arguments?
         }
-        //TODO: i parse the BasicBlock and add it
+
         self.lift_stmt(&TCStmt::Blk(func.blk))
     }
 
@@ -591,7 +593,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 let func = self.module.get_function(globid.as_str()).unwrap();
 
                 // lift args
-                let mut args = vec![];
+                let mut args = Vec::with_capacity(exps.len());
                 for e in exps {
                     args.push(self.lift_exp(&e)?);
                 }
@@ -664,6 +666,26 @@ fn jit_compile_kaleido_prog<'a>(
 pub fn jit(input_filename: &str, ast: TCProg) -> Result<i32> {
     let ctxt = Context::create();
     let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast)?;
-    //unimplemented!("need to capture arguments and cast?");
     Ok(unsafe { func.call(vec![], vec![]) })
+}
+
+pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg) -> Result<()> {
+    let ctxt = Context::create();
+    let mut jit_doer = JitDoer::init(&ctxt, input_filename, OptimizationLevel::None)?;
+    for e in ast.externs {
+        // what do i do with this???
+        let _ext = jit_doer.lift_extern(e);
+    }
+    for f in ast.funcs {
+        // what do i do with this???
+        let _fn = jit_doer.lift_function(f);
+    }
+
+    match jit_doer.module.print_to_file(Path::new(output_filename)) {
+        Ok(_) => Ok(()),
+        Err(msg) => {
+            println!("{:?}", msg);
+            Err(anyhow!("couldn't print module"))
+        }
+    }
 }

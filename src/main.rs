@@ -54,6 +54,12 @@ fn main() {
             println!("error: {}", msg);
             std::process::exit(1);
         }
+    } else if matches.is_present("emit-llvm") {
+        if let Err(msg) = jit::emit_llvm(input_filename, output_filename, typed_prog) {
+            println!("error: {}", msg);
+            std::process::exit(1);
+        }
+
     } else if matches.is_present("jit") {
         match jit::jit(input_filename, typed_prog) {
             Err(e) => {
@@ -61,7 +67,7 @@ fn main() {
                 std::process::exit(1);
             }
             Ok(rc) => {
-                unimplemented!("output is not being redirected correctly, implement this!");
+                //TODO unimplemented!("output is not being redirected correctly, implement this!");
                 std::process::exit(rc);
             }
         }
