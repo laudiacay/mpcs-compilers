@@ -20,7 +20,7 @@ fn main() {
             Arg::from_usage("-v, --verbose 'verbose mode. only warnings will be emitted otherwise for any correct inputs.'"),
             Arg::from_usage("-O 'enable optimizations'"),
             Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'").conflicts_with("emit-llvm"),
-            Arg::from_usage("-jit 'JIT compile and run the code in input-file, any program output will go into output-file'").conflicts_with("emit-llvm").conflicts_with("emit-ast"),
+            Arg::from_usage("--jit 'JIT compile and run the code in input-file, any program output will go into output-file'").conflicts_with("emit-llvm").conflicts_with("emit-ast"),
             Arg::from_usage("--emit-llvm 'produce the LLVM IR (unoptimized unless -O is provided)'"),
             Arg::from_usage("-o <output-file> 'required output file'"),
             Arg::from_usage("<input-file> 'sets the input file to use'")
@@ -62,7 +62,6 @@ fn main() {
             }
             Ok(rc) => {
                 unimplemented!("output is not being redirected correctly, implement this!");
-
                 std::process::exit(rc);
             }
         }

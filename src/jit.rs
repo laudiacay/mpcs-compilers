@@ -1,13 +1,13 @@
+use crate::ast::{BOp, Lit, UOp};
 use crate::typecheck::{TCAtomType, TCExp, TCExtern, TCFunc, TCProg, TCStmt, TCType, TypedExp};
-use crate::ast::{BOp, UOp, Lit};
 use anyhow::{anyhow, Result};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
 use inkwell::types::{BasicType, BasicTypeEnum};
-use inkwell::values::{FunctionValue, PointerValue, BasicValueEnum, InstructionOpcode};
-use inkwell::{AddressSpace, OptimizationLevel, IntPredicate, FloatPredicate};
+use inkwell::values::{BasicValueEnum, FunctionValue, InstructionOpcode, PointerValue};
+use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
 use std::collections::HashMap;
 // may need pub fn set_triple(&self, triple: &TargetTriple)
 // pub fn write_bitcode_to_path(&self, path: &Path) -> bool
@@ -37,13 +37,37 @@ pub extern "C" fn argf(i: i32) -> f64 {
     4.0
 }
 
+#[no_mangle]
+pub extern "C" fn __printint__(i: i32) {
+    println!("{}", i);
+}
+#[no_mangle]
+pub extern "C" fn __printbool__(b: bool) {
+    println!("{}", b);
+}
+#[no_mangle]
+pub extern "C" fn __printfloat__(f: f64) {
+    println!("{}", f);
+}
+#[no_mangle]
+pub extern "C" fn __printstr__(slit: &[u8]) {
+    println!("{}", std::str::from_utf8(slit).unwrap());
+}
 
 // making sure rustc doesn't remove arg and argf
 #[used]
-static EXTERNAL_FNS1: [extern fn(i32) -> i32; 1] = [arg];
+static EXTERNAL_FNS1: [extern "C" fn(i32) -> i32; 1] = [arg];
 
 #[used]
-static EXTERNAL_FNS2: [extern fn(i32) -> f64; 1] = [argf];
+static EXTERNAL_FNS2: [extern "C" fn(i32) -> f64; 1] = [argf];
+#[used]
+static EXTERNAL_FNS3: [extern "C" fn(i32); 1] = [__printint__];
+#[used]
+static EXTERNAL_FNS4: [extern "C" fn(bool); 1] = [__printbool__];
+#[used]
+static EXTERNAL_FNS5: [extern "C" fn(f64); 1] = [__printfloat__];
+#[used]
+static EXTERNAL_FNS6: [extern "C" fn(&[u8]); 1] = [__printstr__];
 
 // TODO i have fucked up the lifetimes and am keeping shit around way too long
 struct JitDoer<'ctx> {
@@ -59,13 +83,13 @@ struct JitDoer<'ctx> {
 }
 
 impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
-    fn init(context: &'ctx Context, module_name: &str, opt_lvl: OptimizationLevel) -> Self {
+    fn init(context: &'ctx Context, module_name: &str, opt_lvl: OptimizationLevel) -> Result<Self> {
         let module = context.create_module(module_name);
         let execution_engine = module
             .create_jit_execution_engine(opt_lvl)
             .expect("error! cannot create jit execution engine");
         let main_builder = context.create_builder();
-        Self {
+        let ret = Self {
             context,
             module,
             main_builder,
@@ -73,6 +97,23 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             current_fn_being_compiled: None,
             current_fn_vdecl_builder: None,
             current_fn_stack_variables: HashMap::new(),
+        };
+        ret.gen_print_externs();
+        Ok(ret)
+    }
+
+    fn gen_print_externs(&self) {
+        let void_type = self.context.void_type();
+        let todo: Vec<(&str, BasicTypeEnum)> = vec![
+            ("__printint__", self.context.i32_type().into()),
+            ("__printfloat__", self.context.f64_type().into()),
+            ("__printbool__", self.context.bool_type().into()),
+        ];
+        for (fn_name, arg_type) in todo.iter() {
+            let args: Vec<BasicTypeEnum> = vec![arg_type.clone()];
+            let fn_type = void_type.fn_type(args.as_slice(), false);
+            self.module
+                .add_function(fn_name, fn_type, Some(Linkage::ExternalWeak));
         }
     }
 
@@ -92,7 +133,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             BasicTypeEnum::PointerType(pt) => bldr.build_alloca(pt, &varname),
             _ => Err(anyhow!("unsupported argument type to add to stack frame"))?,
         };
-        self.current_fn_stack_variables.insert(varname, (var_spot, tctype));
+        self.current_fn_stack_variables
+            .insert(varname, (var_spot, tctype));
         Ok(var_spot)
     }
 
@@ -147,14 +189,17 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             .position_at_end(function_block);
         for (i, arg) in args.iter().enumerate() {
             // add space for each argument to the builder
-            self.add_var_spot_to_fn_stack_frame(*arg, func.args[i].type_.clone(), func.args[i].varid.clone())?;
+            self.add_var_spot_to_fn_stack_frame(
+                *arg,
+                func.args[i].type_.clone(),
+                func.args[i].varid.clone(),
+            )?;
         }
         //TODO: i parse the BasicBlock and add it
-
-        Ok(())
+        self.lift_stmt(&TCStmt::Blk(func.blk))
     }
 
-    fn lift_stmt(&mut self, stmt: &TCStmt) -> Result <()> {
+    fn lift_stmt(&mut self, stmt: &TCStmt) -> Result<()> {
         match stmt {
             TCStmt::Blk(blk) => {
                 /*
@@ -177,7 +222,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 }
 
                 self.current_fn_stack_variables = parent_block_scope;
-            },
+            }
             TCStmt::ReturnStmt(ret) => {
                 match ret {
                     Some(ret) => {
@@ -186,37 +231,46 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                         // typechecker confirms this
                         let lifted_ret = self.lift_exp(ret)?.unwrap();
                         self.main_builder.build_return(Some(&lifted_ret));
-                    },
+                    }
                     None => {
                         self.main_builder.build_return(None);
                     }
                 }
-            },
-            TCStmt::VDeclStmt{ vdecl, exp } => {
+            }
+            TCStmt::VDeclStmt { vdecl, exp } => {
                 let lifted_type = self.lift_type(vdecl.type_)?.unwrap();
-                let var = self.add_var_spot_to_fn_stack_frame(lifted_type, vdecl.type_, vdecl.varid.clone())?;
+                let var = self.add_var_spot_to_fn_stack_frame(
+                    lifted_type,
+                    vdecl.type_,
+                    vdecl.varid.clone(),
+                )?;
 
-                if let TCType::Ref(_,_) = vdecl.type_ {
+                if let TCType::Ref(_, _) = vdecl.type_ {
                     if let TCExp::VarVal(tar_varid) = &exp.exp {
-                        let (tar_ptr, tar_type) = self.current_fn_stack_variables.get(&tar_varid.clone()).unwrap(); 
-                        if let TCType::Ref(_,_) = tar_type {
+                        let (tar_ptr, tar_type) = self
+                            .current_fn_stack_variables
+                            .get(&tar_varid.clone())
+                            .unwrap();
+                        if let TCType::Ref(_, _) = tar_type {
                             let val = self.main_builder.build_load(*tar_ptr, "load");
                             self.main_builder.build_store(var, val);
                         } else {
                             self.main_builder.build_store(var, *tar_ptr);
                         }
                     } else {
-                        Err(anyhow!("reference type assigned to non-variable (likely bug in typechecker)"))?
+                        Err(anyhow!(
+                            "reference type assigned to non-variable (likely bug in typechecker)"
+                        ))?
                     }
                 } else {
                     let lifted_exp = self.lift_exp(exp)?.unwrap();
                     self.main_builder.build_store(var, lifted_exp);
                 }
-            },
+            }
             TCStmt::ExpStmt(exp) => {
                 self.lift_exp(exp)?;
-            },
-            TCStmt::WhileStmt{ cond, stmt: body } => {
+            }
+            TCStmt::WhileStmt { cond, stmt: body } => {
                 // unwrapping this means that a while statement can only be encountered within a
                 // function body, which is right
                 let parent = self.current_fn_being_compiled.unwrap();
@@ -225,39 +279,50 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 let post_bb = self.context.append_basic_block(parent, "endwhile"); // end of loop
 
                 // check condition to see whether to enter loop at all
-                self.main_builder.build_conditional_branch(lifted_cond, loop_bb, post_bb);
+                self.main_builder
+                    .build_conditional_branch(lifted_cond, loop_bb, post_bb);
 
                 // execute body and check condition again
                 self.main_builder.position_at_end(loop_bb);
                 self.lift_stmt(body)?;
-                self.main_builder.build_conditional_branch(lifted_cond, loop_bb, post_bb);
+                self.main_builder
+                    .build_conditional_branch(lifted_cond, loop_bb, post_bb);
 
                 // end of loop
                 self.main_builder.position_at_end(post_bb);
-            },
-            TCStmt::IfStmt{ cond, stmt: body, else_stmt } => {
+            }
+            TCStmt::IfStmt {
+                cond,
+                stmt: body,
+                else_stmt,
+            } => {
                 let parent = self.current_fn_being_compiled.unwrap();
                 let lifted_cond = self.lift_exp(cond)?.unwrap().into_int_value();
                 let body_bb = self.context.append_basic_block(parent, "if");
 
                 // tried to do this with map but that moves else_stmt
                 let mut else_bb = None;
-                if let Some(_) = else_stmt{
+                if let Some(_) = else_stmt {
                     else_bb = Some(self.context.append_basic_block(parent, "else"));
                 }
 
                 let post_bb = self.context.append_basic_block(parent, "endif");
 
                 match else_bb {
-                    Some(else_bb) => self.main_builder.build_conditional_branch(lifted_cond, body_bb, else_bb),
-                    None => self.main_builder.build_conditional_branch(lifted_cond, body_bb, post_bb)
+                    Some(else_bb) => {
+                        self.main_builder
+                            .build_conditional_branch(lifted_cond, body_bb, else_bb)
+                    }
+                    None => {
+                        self.main_builder
+                            .build_conditional_branch(lifted_cond, body_bb, post_bb)
+                    }
                 };
 
                 self.main_builder.position_at_end(body_bb);
                 self.lift_stmt(body)?;
                 self.main_builder.build_unconditional_branch(post_bb);
 
-                
                 if let Some(else_bb) = else_bb {
                     self.main_builder.position_at_end(else_bb);
                     self.lift_stmt(&else_stmt.as_ref().unwrap())?;
@@ -265,8 +330,36 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 };
 
                 self.main_builder.position_at_end(post_bb);
-            },
-            TCStmt::PrintStmt(exp) => unimplemented!("todo"),
+            }
+            TCStmt::PrintStmt(exp) => {
+                let lifted_exp = self.lift_exp(exp)?.unwrap();
+                let globid = match exp.type_ {
+                    TCType::AtomType(TCAtomType::IntType) => "__printint__",
+                    TCType::AtomType(TCAtomType::BoolType) => "__printbool__",
+                    TCType::AtomType(TCAtomType::FloatType) => "__printfloat__",
+                    _ => unimplemented!("awoooo~"),
+                };
+
+                let func = self.module.get_function(globid).unwrap();
+                // lift args
+                let args = vec![lifted_exp];
+
+                // build call using lifted args
+                // unwrap is safe here because typechecker guarantees function arguments are not void
+                let args_arr = args
+                    .iter()
+                    .by_ref()
+                    .map(|&val| val.into())
+                    .collect::<Vec<BasicValueEnum>>();
+
+                let call = self
+                    .main_builder
+                    .build_call(func, args_arr.as_slice(), "call");
+                match call.try_as_basic_value().left() {
+                    Some(val) => val,
+                    None => Err(anyhow!("invalid function call"))?,
+                };
+            }
             TCStmt::PrintStmtSlit(strlit) => unimplemented!("todo"),
         };
         Ok(())
@@ -275,23 +368,23 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     // check the type of an expression and get its value
     fn lift_exp(&self, exp: &TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         match exp.type_ {
-            TCType::AtomType(tca) => {
-                self.lift_tcexp(&exp.exp)
-            }
+            TCType::AtomType(tca) => self.lift_tcexp(&exp.exp),
             TCType::VoidType => self.lift_exp_to_void(&exp.exp),
-            _ => Err(anyhow!("typed expression with reference type (likely a bug)"))?,
+            _ => Err(anyhow!(
+                "typed expression with reference type (likely a bug)"
+            ))?,
         }
     }
 
     fn lift_exp_to_void(&self, exp: &TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
-        if let TCExp::FuncCall{ globid, exps } = exp {
+        if let TCExp::FuncCall { globid, exps } = exp {
             let func_opt = self.module.get_function(globid.as_str());
             if let None = func_opt {
                 // should be unreachable, as this would be caught during typechecking
                 Err(anyhow!("unknown function"))?;
             }
             let func = func_opt.unwrap();
-            
+
             // lift args
             let mut args = vec![];
             for e in exps {
@@ -300,157 +393,203 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
             // build call using lifted args
             // unwrap is safe here because typechecker guarantees function arguments are not void
-            let args_arr = args.iter().by_ref().map(|&val| val.unwrap().into()).collect::<Vec<BasicValueEnum>>();
+            let args_arr = args
+                .iter()
+                .by_ref()
+                .map(|&val| val.unwrap().into())
+                .collect::<Vec<BasicValueEnum>>();
 
             // don't need to save the value as this is only called for void functions
             // but do we need to check if the call itself is valid?
-            self.main_builder.build_call(func, args_arr.as_slice(), "call"); // wtf is the 'name' supposed to be
+            self.main_builder
+                .build_call(func, args_arr.as_slice(), "call"); // wtf is the 'name' supposed to be
         } else {
             // should be unreachable
-            Err(anyhow!("found expression of void type other than function call"))?;
+            Err(anyhow!(
+                "found expression of void type other than function call"
+            ))?;
         }
         Ok(None)
     }
 
     fn lift_tcexp(&self, exp: &TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         let val = match exp {
-            TCExp::Assign{ varid, exp } => {
+            TCExp::Assign { varid, exp } => {
                 let ass_val = self.lift_exp(&exp)?.unwrap();
                 let (var, type_) = self.current_fn_stack_variables.get(varid.as_str()).unwrap(); // variable verified by typechecker already
 
-                if let TCType::Ref(_,_) = type_ {
+                if let TCType::Ref(_, _) = type_ {
                     let ptr = self.main_builder.build_load(*var, "load");
-                    self.main_builder.build_store(ptr.into_pointer_value(), ass_val);
+                    self.main_builder
+                        .build_store(ptr.into_pointer_value(), ass_val);
                 } else {
                     self.main_builder.build_store(*var, ass_val);
                 }
 
                 ass_val
-            },
-            TCExp::Cast{ type_, exp } => {
+            }
+            TCExp::Cast { type_, exp } => {
                 // if casting to/from voids isn't caught by our typechecker im leaving this planet
                 let lifted_exp = self.lift_exp(&exp)?.unwrap();
                 let lifted_type = self.lift_type(*type_)?.unwrap();
-                
+
                 // I have no idea if it makes sense to use this or build_int_cast
                 // from https://llvm.org/docs/LangRef.html#bitcast-to-instruction bitcast means to
                 // cast w/o changing any bits
-                let cast = self.main_builder.build_cast(InstructionOpcode::BitCast, lifted_exp, lifted_type, "cast");
-                cast    
-            },
-            TCExp::BinOp{ op, lhs, rhs } => {
+                let cast = self.main_builder.build_cast(
+                    InstructionOpcode::BitCast,
+                    lifted_exp,
+                    lifted_type,
+                    "cast",
+                );
+                cast
+            }
+            TCExp::BinOp { op, lhs, rhs } => {
                 let lifted_lhs = self.lift_exp(&lhs)?.unwrap();
                 let lifted_rhs = self.lift_exp(&rhs)?.unwrap();
 
                 match (lifted_lhs, lifted_rhs) {
                     (BasicValueEnum::IntValue(lhs_val), BasicValueEnum::IntValue(rhs_val)) => {
                         match op {
-                            BOp::Add => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_add(lhs_val, rhs_val, "add"))
-                            },
-                            BOp::Sub => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_sub(lhs_val, rhs_val, "sub"))
-                            },
-                            BOp::Mult => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_mul(lhs_val, rhs_val, "mul"))
-                            },
-                            BOp::Div => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_signed_div(lhs_val, rhs_val, "div"))
-                            },
+                            BOp::Add => BasicValueEnum::IntValue(
+                                self.main_builder.build_int_add(lhs_val, rhs_val, "add"),
+                            ),
+                            BOp::Sub => BasicValueEnum::IntValue(
+                                self.main_builder.build_int_sub(lhs_val, rhs_val, "sub"),
+                            ),
+                            BOp::Mult => BasicValueEnum::IntValue(
+                                self.main_builder.build_int_mul(lhs_val, rhs_val, "mul"),
+                            ),
+                            BOp::Div => BasicValueEnum::IntValue(
+                                self.main_builder
+                                    .build_int_signed_div(lhs_val, rhs_val, "div"),
+                            ),
                             BOp::EqTo => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(IntPredicate::EQ, lhs_val, rhs_val, "eq"))
-                            },
+                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(
+                                    IntPredicate::EQ,
+                                    lhs_val,
+                                    rhs_val,
+                                    "eq",
+                                ))
+                            }
                             BOp::Gt => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(IntPredicate::SGT, lhs_val, rhs_val, "gt"))
-                            },
+                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(
+                                    IntPredicate::SGT,
+                                    lhs_val,
+                                    rhs_val,
+                                    "gt",
+                                ))
+                            }
                             BOp::Lt => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(IntPredicate::SLT, lhs_val, rhs_val, "lt"))
-                            },
-                            BOp::And => {
-                                BasicValueEnum::IntValue(self.main_builder.build_and(lhs_val, rhs_val, "and"))
-                            },
-                            BOp::Or => {
-                                BasicValueEnum::IntValue(self.main_builder.build_or(lhs_val, rhs_val, "or"))
-                            },
+                                BasicValueEnum::IntValue(self.main_builder.build_int_compare(
+                                    IntPredicate::SLT,
+                                    lhs_val,
+                                    rhs_val,
+                                    "lt",
+                                ))
+                            }
+                            BOp::And => BasicValueEnum::IntValue(
+                                self.main_builder.build_and(lhs_val, rhs_val, "and"),
+                            ),
+                            BOp::Or => BasicValueEnum::IntValue(
+                                self.main_builder.build_or(lhs_val, rhs_val, "or"),
+                            ),
                         }
-                    },
+                    }
                     (BasicValueEnum::FloatValue(lhs_val), BasicValueEnum::FloatValue(rhs_val)) => {
                         match op {
-                            BOp::Add => {
-                                BasicValueEnum::FloatValue(self.main_builder.build_float_add(lhs_val, rhs_val, "add"))
-                            },
-                            BOp::Sub => {
-                                BasicValueEnum::FloatValue(self.main_builder.build_float_sub(lhs_val, rhs_val, "sub"))
-                            },
-                            BOp::Mult => {
-                                BasicValueEnum::FloatValue(self.main_builder.build_float_mul(lhs_val, rhs_val, "mul"))
-                            },
-                            BOp::Div => {
-                                BasicValueEnum::FloatValue(self.main_builder.build_float_div(lhs_val, rhs_val, "div"))
-                            },
+                            BOp::Add => BasicValueEnum::FloatValue(
+                                self.main_builder.build_float_add(lhs_val, rhs_val, "add"),
+                            ),
+                            BOp::Sub => BasicValueEnum::FloatValue(
+                                self.main_builder.build_float_sub(lhs_val, rhs_val, "sub"),
+                            ),
+                            BOp::Mult => BasicValueEnum::FloatValue(
+                                self.main_builder.build_float_mul(lhs_val, rhs_val, "mul"),
+                            ),
+                            BOp::Div => BasicValueEnum::FloatValue(
+                                self.main_builder.build_float_div(lhs_val, rhs_val, "div"),
+                            ),
                             BOp::EqTo => {
-                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(FloatPredicate::UEQ, lhs_val, rhs_val, "eq"))
-                            },
+                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(
+                                    FloatPredicate::UEQ,
+                                    lhs_val,
+                                    rhs_val,
+                                    "eq",
+                                ))
+                            }
                             BOp::Gt => {
-                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(FloatPredicate::UGT, lhs_val, rhs_val, "gt"))
-                            },
+                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(
+                                    FloatPredicate::UGT,
+                                    lhs_val,
+                                    rhs_val,
+                                    "gt",
+                                ))
+                            }
                             BOp::Lt => {
-                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(FloatPredicate::ULT, lhs_val, rhs_val, "lt"))
-                            },
-                            _ => Err(anyhow!("illegal operation on float values (most likely 'and' or 'or')"))?
+                                BasicValueEnum::IntValue(self.main_builder.build_float_compare(
+                                    FloatPredicate::ULT,
+                                    lhs_val,
+                                    rhs_val,
+                                    "lt",
+                                ))
+                            }
+                            _ => Err(anyhow!(
+                                "illegal operation on float values (most likely 'and' or 'or')"
+                            ))?,
                         }
                     }
                     // should be unreachable due to typechecker
-                    _ => Err(anyhow!("illegal binop in int-type expression (likely a bug)"))?
+                    _ => Err(anyhow!(
+                        "illegal binop in int-type expression (likely a bug)"
+                    ))?,
                 }
-            },
-            TCExp::UnaryOp{ op, exp }  => {
+            }
+            TCExp::UnaryOp { op, exp } => {
                 let lifted_exp = self.lift_exp(&exp)?.unwrap();
 
                 match lifted_exp {
-                    BasicValueEnum::IntValue(val) => {
-                        match op {
-                            UOp::SignedNeg => {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "neg"))
-                            }
-                            UOp::BitwiseNeg => {
-                                BasicValueEnum::IntValue(self.main_builder.build_not(val, "not"))
-                            }
+                    BasicValueEnum::IntValue(val) => match op {
+                        UOp::SignedNeg => {
+                            BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "neg"))
+                        }
+                        UOp::BitwiseNeg => {
+                            BasicValueEnum::IntValue(self.main_builder.build_not(val, "not"))
                         }
                     },
-                    BasicValueEnum::FloatValue(val) => {
-                        match op {
-                            UOp::SignedNeg => {
-                                BasicValueEnum::FloatValue(self.main_builder.build_float_neg(val, "neg"))
-                            }
-                            _ => Err(anyhow!("invalid op in float-typed unary expression"))?
-                        }
+                    BasicValueEnum::FloatValue(val) => match op {
+                        UOp::SignedNeg => BasicValueEnum::FloatValue(
+                            self.main_builder.build_float_neg(val, "neg"),
+                        ),
+                        _ => Err(anyhow!("invalid op in float-typed unary expression"))?,
                     },
-                    _ => Err(anyhow!("invalid value in unary expression"))?
+                    _ => Err(anyhow!("invalid value in unary expression"))?,
                 }
-            },
-            TCExp::Literal(lit) => {
-                match lit {
-                    Lit::LitInt(i) => {
-                        BasicValueEnum::IntValue(self.context.i32_type().const_int(*i as u64, true))
-                    },
-                    Lit::LitFloat(i) => {
-                        BasicValueEnum::FloatValue(self.context.f64_type().const_float(*i))
-                    },
-                    Lit::LitBool(i) => {
-                        BasicValueEnum::IntValue(self.context.bool_type().const_int(*i as u64, true))
-                    },
+            }
+            TCExp::Literal(lit) => match lit {
+                Lit::LitInt(i) => {
+                    BasicValueEnum::IntValue(self.context.i32_type().const_int(*i as u64, true))
+                }
+                Lit::LitFloat(i) => {
+                    BasicValueEnum::FloatValue(self.context.f64_type().const_float(*i))
+                }
+                Lit::LitBool(i) => {
+                    BasicValueEnum::IntValue(self.context.bool_type().const_int(*i as u64, true))
                 }
             },
             TCExp::VarVal(varid) => {
                 // typechecker makes sure variable is in scope here
-                let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap().0;
+                let var = self
+                    .current_fn_stack_variables
+                    .get(varid.as_str())
+                    .unwrap()
+                    .0;
                 self.main_builder.build_load(var, varid.as_str())
-            },
-            TCExp::FuncCall{ globid, exps } => {
+            }
+            TCExp::FuncCall { globid, exps } => {
                 // missing function caught during typechecking
                 let func = self.module.get_function(globid.as_str()).unwrap();
-                
+
                 // lift args
                 let mut args = vec![];
                 for e in exps {
@@ -459,14 +598,20 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
                 // build call using lifted args
                 // unwrap is safe here because typechecker guarantees function arguments are not void
-                let args_arr = args.iter().by_ref().map(|&val| val.unwrap().into()).collect::<Vec<BasicValueEnum>>();
+                let args_arr = args
+                    .iter()
+                    .by_ref()
+                    .map(|&val| val.unwrap().into())
+                    .collect::<Vec<BasicValueEnum>>();
 
-                let call = self.main_builder.build_call(func, args_arr.as_slice(), "call");
+                let call = self
+                    .main_builder
+                    .build_call(func, args_arr.as_slice(), "call");
                 match call.try_as_basic_value().left() {
                     Some(val) => val,
-                    None => Err(anyhow!("invalid function call"))?
+                    None => Err(anyhow!("invalid function call"))?,
                 }
-            },
+            }
         };
         Ok(Some(val))
     }
@@ -496,13 +641,13 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
 type KaleidoRunFunc = unsafe extern "C" fn(Vec<i32>, Vec<f64>) -> i32;
 
-fn jit_compile_kaleido_prog(
-    toplvl_filename: &str,
+fn jit_compile_kaleido_prog<'a>(
+    ctxt: &'a Context,
+    toplvl_filename: &'a str,
     ast: TCProg,
-) -> Result<JitFunction<KaleidoRunFunc>> {
-    let context = Context::create();
+) -> Result<JitFunction<'a, KaleidoRunFunc>> {
     //https://thedan64.github.io/inkwell/inkwell/enum.OptimizationLevel.html
-    let mut jit_doer = JitDoer::init(&context, toplvl_filename, OptimizationLevel::None);
+    let mut jit_doer = JitDoer::init(ctxt, toplvl_filename, OptimizationLevel::None)?;
     for e in ast.externs {
         // what do i do with this???
         let _ext = jit_doer.lift_extern(e);
@@ -512,11 +657,13 @@ fn jit_compile_kaleido_prog(
         let _fn = jit_doer.lift_function(f);
     }
     // pull out jitted run function and OFF we go!!
-    unimplemented!("not done");
+    let efn = unsafe { jit_doer.execution_engine.get_function("run")? };
+    Ok(efn)
 }
 
 pub fn jit(input_filename: &str, ast: TCProg) -> Result<i32> {
-    let func = jit_compile_kaleido_prog(input_filename, ast)?;
-    unimplemented!("need to capture arguments and cast?");
+    let ctxt = Context::create();
+    let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast)?;
+    //unimplemented!("need to capture arguments and cast?");
     Ok(unsafe { func.call(vec![], vec![]) })
 }
