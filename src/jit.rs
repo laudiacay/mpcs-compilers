@@ -287,8 +287,9 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 // execute body and check condition again
                 self.main_builder.position_at_end(loop_bb);
                 self.lift_stmt(body)?;
+                let end_cond = self.lift_exp(cond)?.unwrap().into_int_value();
                 self.main_builder
-                    .build_conditional_branch(lifted_cond, loop_bb, post_bb);
+                    .build_conditional_branch(end_cond, loop_bb, post_bb);
 
                 // end of loop
                 self.main_builder.position_at_end(post_bb);

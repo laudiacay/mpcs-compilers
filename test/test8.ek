@@ -1,0 +1,7 @@
+def int sum(int $x, int $y) {
+    return $x + $y;
+}
+
+def int run() {
+    return sum(2,3);
+}
