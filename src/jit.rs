@@ -55,7 +55,7 @@ struct JitDoer<'ctx> {
     current_fn_being_compiled: Option<FunctionValue<'ctx>>,
     // unsure if this remains correct after like injecting instructions... hm
     current_fn_vdecl_builder: Option<Builder<'ctx>>,
-    current_fn_stack_variables: HashMap<String, PointerValue<'ctx>>,
+    current_fn_stack_variables: HashMap<String, BasicValueEnum<'ctx>>,
 }
 
 impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
@@ -91,7 +91,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             BasicTypeEnum::PointerType(pt) => bldr.build_alloca(pt, &varname),
             _ => Err(anyhow!("unsupported argument type to add to stack frame"))?,
         };
-        self.current_fn_stack_variables.insert(varname, var_spot);
+        self.current_fn_stack_variables.insert(varname, BasicValueEnum::PointerValue(var_spot));
         Ok(var_spot)
     }
 
@@ -153,7 +153,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         Ok(())
     }
 
-    fn lift_stmt(&self, stmt: TCStmt) -> Result <()> {
+    fn lift_stmt(&mut self, stmt: TCStmt) -> Result <()> {
         match stmt {
             TCStmt::Blk(blk) => unimplemented!("how do scopes work"),
             TCStmt::ReturnStmt(ret) => {
@@ -231,7 +231,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     }
 
     // check the type of an expression and get its value
-    fn lift_exp(&self, exp: TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+    fn lift_exp(&mut self, exp: TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         match exp.type_ {
             TCType::AtomType(tca) => {
                 self.lift_tcexp(exp.exp)
@@ -241,7 +241,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         }
     }
 
-    fn lift_exp_to_void(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+    fn lift_exp_to_void(&mut self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         if let TCExp::FuncCall{ globid, exps } = exp {
             let func_opt = self.module.get_function(globid.as_str());
             if let None = func_opt {
@@ -270,13 +270,17 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         Ok(None)
     }
 
-    fn lift_tcexp(&self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
+    fn lift_tcexp(&mut self, exp: TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         let val = match exp {
             TCExp::Assign{ varid, exp } => {
                 let ass_val = self.lift_exp(*exp)?.unwrap();
                 let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap(); // variable verified by typechecker already
 
-                self.main_builder.build_store(*var, ass_val);
+                if let BasicValueEnum::PointerValue(var) = var {
+                    self.main_builder.build_store(*var, ass_val);
+                } else {
+                    self.current_fn_stack_variables.insert(varid, ass_val);
+                }
                 ass_val
             },
             TCExp::Cast{ type_, exp } => {
@@ -397,7 +401,10 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             TCExp::VarVal(varid) => {
                 // typechecker makes sure variable is in scope here
                 let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap();
-                self.main_builder.build_load(*var, varid.as_str())
+                match var {
+                    BasicValueEnum::PointerValue(var) => self.main_builder.build_load(*var, varid.as_str()),
+                    _ => *var
+                }
             },
             TCExp::FuncCall{ globid, exps } => {
                 // missing function caught during typechecking
