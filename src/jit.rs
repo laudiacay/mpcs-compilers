@@ -555,13 +555,41 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 // I have no idea if it makes sense to use this or build_int_cast
                 // from https://llvm.org/docs/LangRef.html#bitcast-to-instruction bitcast means to
                 // cast w/o changing any bits
-                let cast = self.main_builder.build_cast(
-                    InstructionOpcode::BitCast,
-                    lifted_exp,
-                    lifted_type,
-                    "cast",
-                );
-                cast
+                match type_ {
+                    TCType::AtomType(TCAtomType::IntType) => {
+                        match exp.type_ {
+                            TCType::AtomType(TCAtomType::IntType) => lifted_exp,
+                            TCType::AtomType(TCAtomType::FloatType) => {
+                                let cast = self.main_builder.build_cast(
+                                    InstructionOpcode::SIToFP,
+                                    lifted_exp,
+                                    lifted_type,
+                                    "cast",
+                                );
+                                cast
+                            },
+                            _ => unimplemented!("unsupported cast"),
+                        }
+                    },
+                    TCType::AtomType(TCAtomType::FloatType) => {
+                        match exp.type_ {
+                            TCType::AtomType(TCAtomType::IntType) => {
+                                let cast = self.main_builder.build_cast(
+                                    InstructionOpcode::FPToSI,
+                                    lifted_exp,
+                                    lifted_type,
+                                    "cast",
+                                );
+                                cast
+                            },
+                            TCType::AtomType(TCAtomType::FloatType) => lifted_exp,
+                            _ => unimplemented!("unsupported cast"),
+                        }
+                    },
+                    TCType::AtomType(TCAtomType::CIntType) => unimplemented!("unsupported cint"),
+                    TCType::AtomType(TCAtomType::BoolType) => lifted_exp,
+                    _ => unimplemented!("nonatomic type came out of casted expression. hm what")
+                }
             }
             TCExp::BinOp { op, lhs, rhs } => {
                 let lifted_lhs = self.lift_exp(&lhs)?.unwrap();
