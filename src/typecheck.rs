@@ -68,11 +68,16 @@ fn typecheck_fn(
         }
     }
 
+    let re_type_opt = match re_type {
+        TCType::VoidType => None,
+        _ => Some(re_type),
+    };
+
     let my_block = typecheck_block(
         fun.blk,
         defined_functions,
         defined_vars,
-        Some(re_type.clone()),
+        re_type_opt,
         HashMap::new(),
     )?;
     Ok(TCFunc {
