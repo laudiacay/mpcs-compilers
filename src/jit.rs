@@ -111,7 +111,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             let args: Vec<BasicTypeEnum> = vec![arg_type.clone()];
             let fn_type = void_type.fn_type(args.as_slice(), false);
             self.module
-                .add_function(fn_name, fn_type, Some(Linkage::Private));
+                .add_function(fn_name, fn_type, Some(Linkage::ExternalWeak));
         }
     }
 
@@ -387,13 +387,13 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     .map(|&val| val.into())
                     .collect::<Vec<BasicValueEnum>>();
 
-                let call = self
-                    .main_builder
-                    .build_call(func, args_arr.as_slice(), "call");
+                self.main_builder.build_call(func, args_arr.as_slice(), "call");
+                /*
                 match call.try_as_basic_value().left() {
                     Some(val) => val,
                     None => Err(anyhow!("invalid function call"))?,
                 };
+                */
                 Ok(false)
             }
             TCStmt::PrintStmtSlit(strlit) => unimplemented!("todo"),
@@ -413,6 +413,35 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
     fn lift_exp_to_void(&self, exp: &TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         if let TCExp::FuncCall { globid, exps } = exp {
+            let func = self.module.get_function(globid.as_str()).unwrap();
+
+            // lift args
+            let mut args = Vec::with_capacity(exps.len());
+            for (i,e) in exps.iter().enumerate() {
+                let param = func.get_nth_param(i as u32).ok_or(anyhow!("couldn't get function parameter"))?;
+                if let BasicValueEnum::PointerValue(_) = param {
+                    if let TCExp::VarVal(varid) = &e.exp {
+                        let the_variable = 
+                            self.current_fn_stack_variables.get(varid).ok_or(anyhow!("no such variable (bug)"))?.0;
+                        args.push(BasicValueEnum::PointerValue(the_variable));
+                    } else {
+                        Err(anyhow!("expected varval in reference type argument"))?;
+                    }
+                } else {
+                    args.push(self.lift_exp(&e)?.unwrap());
+                }
+            }
+
+            // build call using lifted args
+            let args_arr = args
+                .iter()
+                .by_ref()
+                .map(|&val| val.into())
+                .collect::<Vec<BasicValueEnum>>();
+
+
+            self.main_builder.build_call(func, args_arr.as_slice(), "call");
+            /*
             let func_opt = self.module.get_function(globid.as_str());
             if let None = func_opt {
                 // should be unreachable, as this would be caught during typechecking
@@ -438,6 +467,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             // but do we need to check if the call itself is valid?
             self.main_builder
                 .build_call(func, args_arr.as_slice(), "call"); // wtf is the 'name' supposed to be
+            */
         } else {
             // should be unreachable
             Err(anyhow!(
@@ -630,17 +660,28 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
                 // lift args
                 let mut args = Vec::with_capacity(exps.len());
-                for e in exps {
-                    args.push(self.lift_exp(&e)?);
+                for (i,e) in exps.iter().enumerate() {
+                    let param = func.get_nth_param(i as u32).ok_or(anyhow!("couldn't get function parameter"))?;
+                    if let BasicValueEnum::PointerValue(_) = param {
+                        if let TCExp::VarVal(varid) = &e.exp {
+                            let the_variable = 
+                                self.current_fn_stack_variables.get(varid).ok_or(anyhow!("no such variable (bug)"))?.0;
+                            args.push(BasicValueEnum::PointerValue(the_variable));
+                        } else {
+                            Err(anyhow!("expected varval in reference type argument"))?;
+                        }
+                    } else {
+                        args.push(self.lift_exp(&e)?.unwrap());
+                    }
                 }
 
                 // build call using lifted args
-                // unwrap is safe here because typechecker guarantees function arguments are not void
                 let args_arr = args
                     .iter()
                     .by_ref()
-                    .map(|&val| val.unwrap().into())
+                    .map(|&val| val.into())
                     .collect::<Vec<BasicValueEnum>>();
+
 
                 let call = self
                     .main_builder
@@ -715,7 +756,6 @@ pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg) -> Re
     for f in ast.funcs {
         // what do i do with this???
         let _fn = jit_doer.lift_function(f)?;
-        jit_doer.module.print_to_stderr();
     }
 
     match jit_doer.module.print_to_file(Path::new(output_filename)) {
