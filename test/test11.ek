@@ -1,0 +1,11 @@
+def void thrinc(ref int $x) {
+    $x = $x + 33;
+    return;
+}
+
+def int run() {
+    int $x = 1;
+    thrinc($x);
+    print($x);
+    return 0;
+}

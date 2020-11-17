@@ -1,76 +1,33 @@
-; ModuleID = 'test/test1_without_print_literals.ek'
-source_filename = "test/test1_without_print_literals.ek"
+; ModuleID = 'test/test11.ek'
+source_filename = "test/test11.ek"
 target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
 
-declare private void @__printint__(i32)
+declare extern_weak void @__printint__(i32)
 
-declare private void @__printfloat__(double)
+declare extern_weak void @__printfloat__(double)
 
-declare private void @__printbool__(i1)
+declare extern_weak void @__printbool__(i1)
 
-declare extern_weak i32 @getarg(i32)
+declare extern_weak void @__printstr__(i64, i32)
 
-declare extern_weak double @getargf(i32)
-
-define i32 @fib(i32) {
+define void @thrinc(i32*) {
 entry:
-  %n = alloca i32
-  store i32 %0, i32* %n
-  %n1 = load i32, i32* %n
-  %lt = icmp slt i32 %n1, 2
-  br i1 %lt, label %if, label %endif
-  %a = alloca i32
-  %b = alloca i32
-
-if:                                               ; preds = %entry
-  %n2 = load i32, i32* %n
-  %eq = icmp eq i32 %n2, 0
-  br i1 %eq, label %if3, label %else
-
-endif:                                            ; preds = %endif4, %entry
-  %n5 = load i32, i32* %n
-  %sub = sub i32 %n5, 1
-  %call = call i32 @fib(i32 %sub)
-  store i32 %call, i32* %a
-  %n6 = load i32, i32* %n
-  %sub7 = sub i32 %n6, 2
-  %call8 = call i32 @fib(i32 %sub7)
-  store i32 %call8, i32* %b
-  %a9 = load i32, i32* %a
-  %b10 = load i32, i32* %b
-  %add = add i32 %a9, %b10
-  ret i32 %add
-
-if3:                                              ; preds = %if
-  ret i32 0
-  br label %endif4
-
-else:                                             ; preds = %if
-  ret i32 1
-  br label %endif4
-
-endif4:                                           ; preds = %else, %if3
-  br label %endif
-}
-
-define void @inc(i32*) {
-entry:
-  %n = alloca i32*
-  store i32* %0, i32** %n
-}
-
-define void @things(i32*) {
-entry:
-  %n = alloca i32*
-  store i32* %0, i32** %n
-  %n1 = load i32*, i32** %n
+  %x = alloca i32*
+  store i32* %0, i32** %x
+  %x1 = load i32*, i32** %x
+  %x2 = load i32, i32* %x1
+  %add = add i32 %x2, 33
+  %load = load i32*, i32** %x
+  store i32 %add, i32* %load
+  ret void
 }
 
 define i32 @run() {
 entry:
-  %val = alloca i32
-  %call = call i32 @fib(i32 5)
-  store i32 %call, i32* %val
-  %val1 = load i32, i32* %val
-  call void @__printint__(i32 %val1)
+  %x = alloca i32
+  store i32 1, i32* %x
+  call void @thrinc(i32* %x)
+  %x1 = load i32, i32* %x
+  call void @__printint__(i32 %x1)
+  ret i32 0
 }

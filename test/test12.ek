@@ -1,0 +1,10 @@
+extern int arg(int);
+extern float argf(int);
+
+def int run() {
+    int $x = arg(0);
+    float $y = argf(1);
+    print($x);
+    print($y);
+    return 0;
+}

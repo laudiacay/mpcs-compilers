@@ -6,7 +6,7 @@ extern crate lalrpop_util;
 mod ast;
 mod jit;
 mod typecheck;
-use clap::{App, Arg};
+use clap::{App, Arg, Values};
 use std::fs::{read_to_string, File};
 
 lalrpop_mod!(pub kaleidoscope); // synthesized by LALRPOP
@@ -23,7 +23,8 @@ fn main() {
             Arg::from_usage("--jit 'JIT compile and run the code in input-file, any program output will go into output-file'").conflicts_with("emit-llvm").conflicts_with("emit-ast"),
             Arg::from_usage("--emit-llvm 'produce the LLVM IR (unoptimized unless -O is provided)'"),
             Arg::from_usage("-o <output-file> 'required output file'"),
-            Arg::from_usage("<input-file> 'sets the input file to use'")
+            Arg::from_usage("<input-file> 'sets the input file to use'"),
+            Arg::from_usage("[args]... 'arguments to pass to just-in-time compiled program'"),
         ])
         .get_matches();
     let input_filename = matches.value_of("input-file").unwrap();
@@ -60,13 +61,19 @@ fn main() {
             std::process::exit(1);
         }
     } else if matches.is_present("jit") {
-        match jit::jit(input_filename, typed_prog) {
+        // let args:Iterator<Item=&str> = matches.values_of("args").unwrap().collect();
+        let mut arg_strings = vec![];
+        for a in matches.values_of("args").unwrap_or(Values::default()) {
+            arg_strings.push(a.to_string());
+        }
+        match jit::jit(input_filename, 
+                       typed_prog, 
+                       arg_strings) {
             Err(e) => {
                 println!("error: {}", e);
                 std::process::exit(1);
             }
             Ok(rc) => {
-                //TODO unimplemented!("output is not being redirected correctly, implement this!");
                 std::process::exit(rc);
             }
         }

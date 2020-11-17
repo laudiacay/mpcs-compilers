@@ -1,0 +1,9 @@
+def void inc(ref int $n) {
+    $n = $n + 1;
+}
+
+def int run() {
+    int $x = 11;
+    inc($x);
+    return $x;
+}

@@ -1,0 +1,98 @@
+; ModuleID = 'test/test1_no_prints_at_all.ek'
+source_filename = "test/test1_no_prints_at_all.ek"
+target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
+
+declare private void @__printint__(i32)
+
+declare private void @__printfloat__(double)
+
+declare private void @__printbool__(i1)
+
+define i32 @fib(i32) {
+entry:
+  %b = alloca i32
+  %a = alloca i32
+  %n = alloca i32
+  store i32 %0, i32* %n
+  %n1 = load i32, i32* %n
+  %lt = icmp slt i32 %n1, 2
+  br i1 %lt, label %if, label %endif
+
+if:                                               ; preds = %entry
+  %n2 = load i32, i32* %n
+  %eq = icmp eq i32 %n2, 0
+  br i1 %eq, label %if3, label %else
+
+endif:                                            ; preds = %entry
+  %n4 = load i32, i32* %n
+  %sub = sub i32 %n4, 1
+  %call = call i32 @fib(i32 %sub)
+  store i32 %call, i32* %a
+  %n5 = load i32, i32* %n
+  %sub6 = sub i32 %n5, 2
+  %call7 = call i32 @fib(i32 %sub6)
+  store i32 %call7, i32* %b
+  %a8 = load i32, i32* %a
+  %b9 = load i32, i32* %b
+  %add = add i32 %a8, %b9
+  ret i32 %add
+
+if3:                                              ; preds = %if
+  ret i32 0
+
+else:                                             ; preds = %if
+  ret i32 1
+}
+
+define void @inc(i32*) {
+entry:
+  %n = alloca i32*
+  store i32* %0, i32** %n
+  %n1 = load i32*, i32** %n
+  %n2 = load i32, i32* %n1
+  %add = add i32 %n2, 1
+  %load = load i32*, i32** %n
+  store i32 %add, i32* %load
+  ret void
+}
+
+define void @things(i32*) {
+entry:
+  %n = alloca i32*
+  store i32* %0, i32** %n
+  %n1 = load i32*, i32** %n
+  %n2 = load i32, i32* %n1
+  %gt = icmp sgt i32 %n2, 100
+  %not = xor i1 %gt, true
+  br i1 %not, label %loop, label %endwhile
+
+loop:                                             ; preds = %loop, %entry
+  %n3 = load i32*, i32** %n
+  %n4 = load i32, i32* %n3
+  %n5 = load i32*, i32** %n
+  %n6 = load i32, i32* %n5
+  %mul = mul i32 %n4, %n6
+  %sub = sub i32 %mul, 2
+  %load = load i32*, i32** %n
+  store i32 %sub, i32* %load
+  %n7 = load i32*, i32** %n
+  %n8 = load i32, i32* %n7
+  %gt9 = icmp sgt i32 %n8, 100
+  %not10 = xor i1 %gt9, true
+  br i1 %not10, label %loop, label %endwhile
+
+endwhile:                                         ; preds = %loop, %entry
+  ret void
+}
+
+define i32 @run() {
+entry:
+  %val = alloca i32
+  %call = call i32 @fib(i32 5)
+  store i32 %call, i32* %val
+  %val1 = load i32, i32* %val
+  call void @inc(i32 %val1)
+  %val2 = load i32, i32* %val
+  call void @things(i32 %val2)
+  ret i32 0
+}

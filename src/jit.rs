@@ -29,14 +29,30 @@ pub extern "C" fn kaleido_println() {
 }
 */
 
+static mut cmd_line_args: Vec<String> = vec![];
+
 #[no_mangle]
 pub extern "C" fn arg(i: i32) -> i32 {
-    4
+    unsafe { 
+        if i < cmd_line_args.len() as i32 || i < 0 {
+            return cmd_line_args[i as usize].parse().unwrap(); 
+        } else {
+            println!("error: argument out of bounds");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[no_mangle]
 pub extern "C" fn argf(i: i32) -> f64 {
-    4.0
+    unsafe { 
+        if i < cmd_line_args.len() as i32 || i < 0 as i32 {
+            return cmd_line_args[i as usize].parse().unwrap(); 
+        } else {
+            println!("error: argument out of bounds");
+            std::process::exit(1);
+        }
+    }
 }
 
 #[no_mangle]
@@ -72,7 +88,6 @@ static EXTERNAL_FNS5: [extern "C" fn(f64); 1] = [__printfloat__];
 #[used]
 static EXTERNAL_FNS6: [extern "C" fn(u64); 1] = [__printstr__];
 
-// TODO i have fucked up the lifetimes and am keeping shit around way too long
 struct JitDoer<'ctx> {
     context: &'ctx Context,
     module: Module<'ctx>,
@@ -781,8 +796,9 @@ fn jit_compile_kaleido_prog<'a>(
     Ok(efn)
 }
 
-pub fn jit(input_filename: &str, ast: TCProg) -> Result<i32> {
+pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>) -> Result<i32> {
     let ctxt = Context::create();
+    unsafe { cmd_line_args = args };
     let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast)?;
     Ok(unsafe { func.call() })
 }

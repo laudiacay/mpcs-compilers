@@ -1,0 +1,75 @@
+---
+externs: []
+funcs:
+  - type_: VoidType
+    globid: thrinc
+    args:
+      - type_:
+          Ref:
+            - false
+            - IntType
+        varid: x
+    blk:
+      stmts:
+        - ExpStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              Assign:
+                varid: x
+                exp:
+                  type_:
+                    AtomType: IntType
+                  exp:
+                    BinOp:
+                      op: Add
+                      lhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          VarVal: x
+                      rhs:
+                        type_:
+                          AtomType: IntType
+                        exp:
+                          Literal:
+                            LitInt: 33
+        - ReturnStmt: ~
+  - type_:
+      AtomType: IntType
+    globid: run
+    args: []
+    blk:
+      stmts:
+        - VDeclStmt:
+            vdecl:
+              type_:
+                AtomType: IntType
+              varid: x
+            exp:
+              type_:
+                AtomType: IntType
+              exp:
+                Literal:
+                  LitInt: 1
+        - ExpStmt:
+            type_: VoidType
+            exp:
+              FuncCall:
+                globid: thrinc
+                exps:
+                  - type_:
+                      AtomType: IntType
+                    exp:
+                      VarVal: x
+        - PrintStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              VarVal: x
+        - ReturnStmt:
+            type_:
+              AtomType: IntType
+            exp:
+              Literal:
+                LitInt: 0

@@ -1,0 +1,31 @@
+; ModuleID = 'test/test10.ek'
+source_filename = "test/test10.ek"
+target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
+
+declare private void @__printint__(i32)
+
+declare private void @__printfloat__(double)
+
+declare private void @__printbool__(i1)
+
+define void @inc(i32*) {
+entry:
+  %n = alloca i32*
+  store i32* %0, i32** %n
+  %n1 = load i32*, i32** %n
+  %n2 = load i32, i32* %n1
+  %add = add i32 %n2, 1
+  %load = load i32*, i32** %n
+  store i32 %add, i32* %load
+  ret void
+}
+
+define i32 @run() {
+entry:
+  %x = alloca i32
+  store i32 11, i32* %x
+  %x1 = load i32, i32* %x
+  call void @inc(i32 %x1)
+  %x2 = load i32, i32* %x
+  ret i32 %x2
+}

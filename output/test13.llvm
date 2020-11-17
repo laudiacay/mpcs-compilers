@@ -1,0 +1,28 @@
+; ModuleID = 'test/test13.ek'
+source_filename = "test/test13.ek"
+target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
+
+declare private void @__printint__(i32)
+
+declare private void @__printfloat__(double)
+
+declare private void @__printbool__(i1)
+
+define i32 @run() {
+entry:
+  %x = alloca i32
+  store i32 3, i32* %x
+  %x1 = load i32, i32* %x
+  %gt = icmp sgt i32 %x1, 2
+  br i1 %gt, label %if, label %else
+
+if:                                               ; preds = %entry
+  ret i32 2
+  br label %endif
+
+else:                                             ; preds = %entry
+  ret i32 1
+  br label %endif
+
+endif:                                            ; preds = %else, %if
+}

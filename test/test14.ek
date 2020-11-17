@@ -1,0 +1,10 @@
+def void asdf(ref float $a) {
+    $a = $a + 1.5;
+}
+
+def int run() {
+    float $x = 2.0;
+    asdf($x);
+    print($x);
+    return 0;
+}
