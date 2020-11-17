@@ -1,0 +1,7 @@
+def int run() {
+    float $x = 3.3;
+    int $y = 1;
+    float $z = [float] $y;
+    print($x + $z);
+    return 0;
+}

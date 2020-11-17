@@ -1,0 +1,137 @@
+; ModuleID = 'test/test2-arg.ek'
+source_filename = "test/test2-arg.ek"
+target datalayout = "e-m:o-i64:64-f80:128-n8:16:32:64-S128"
+
+declare extern_weak void @__printint__(i32)
+
+declare extern_weak void @__printfloat__(double)
+
+declare extern_weak void @__printbool__(i1)
+
+declare extern_weak void @__printstr__(i64, i32)
+
+declare extern_weak i32 @arg(i32)
+
+declare extern_weak double @argf(i32)
+
+define double @test1(double*, double*, double) {
+entry:
+  %xyz = alloca i32
+  %xy = alloca i32
+  %x = alloca i32
+  %c = alloca double
+  %b = alloca double*
+  %a = alloca double*
+  store double* %0, double** %a
+  store double* %1, double** %b
+  store double %2, double* %c
+  store i32 0, i32* %x
+  store i32 1, i32* %xy
+  store i32 2, i32* %xyz
+  %xyz1 = load i32, i32* %xyz
+  %gt = icmp sgt i32 %xyz1, 8
+  br i1 %gt, label %loop, label %endwhile
+
+loop:                                             ; preds = %endif33, %entry
+  %a2 = load double*, double** %a
+  %a3 = load double, double* %a2
+  %b4 = load double*, double** %b
+  %b5 = load double, double* %b4
+  %add = fadd double %a3, %b5
+  %c6 = load double, double* %c
+  %a7 = load double*, double** %a
+  %a8 = load double, double* %a7
+  %div = fdiv double %c6, %a8
+  %b9 = load double*, double** %b
+  %b10 = load double, double* %b9
+  %mul = fmul double %div, %b10
+  %sub = fsub double %add, %mul
+  %cast = bitcast double %sub to i32
+  store i32 %cast, i32* %x
+  %a11 = load double*, double** %a
+  %a12 = load double, double* %a11
+  %b13 = load double*, double** %b
+  %b14 = load double, double* %b13
+  %eq = fcmp ueq double %a12, %b14
+  br i1 %eq, label %if, label %else
+
+endwhile:                                         ; preds = %endif33, %entry
+  %c37 = load double, double* %c
+  ret double %c37
+
+if:                                               ; preds = %loop
+  store i32 1, i32* %xy
+  br label %endif
+
+else:                                             ; preds = %loop
+  store i32 0, i32* %xy
+  br label %endif
+
+endif:                                            ; preds = %else, %if
+  %xyz15 = load i32, i32* %xyz
+  %xy16 = load i32, i32* %xy
+  %neg = sub i32 0, %xy16
+  %gt17 = icmp sgt i32 %xyz15, %neg
+  %a18 = load double*, double** %a
+  %a19 = load double, double* %a18
+  %b20 = load double*, double** %b
+  %b21 = load double, double* %b20
+  %lt = fcmp ult double %a19, %b21
+  %and = and i1 %gt17, %lt
+  %c22 = load double, double* %c
+  %a23 = load double*, double** %a
+  %a24 = load double, double* %a23
+  %eq25 = fcmp ueq double %c22, %a24
+  %x26 = load i32, i32* %x
+  %eq27 = icmp eq i32 %x26, 0
+  %or = or i1 %eq25, %eq27
+  %or28 = or i1 %and, %or
+  br i1 %or28, label %if29, label %else30
+
+if29:                                             ; preds = %endif
+  %a31 = load double*, double** %a
+  %a32 = load double, double* %a31
+  ret double %a32
+
+else30:                                           ; preds = %endif
+  %load = load double*, double** %a
+  store double 8.500000e+00, double* %load
+  br label %endif33
+
+endif33:                                          ; preds = %else30
+  %load34 = load double*, double** %b
+  store double 7.200000e+00, double* %load34
+  %xyz35 = load i32, i32* %xyz
+  %gt36 = icmp sgt i32 %xyz35, 8
+  br i1 %gt36, label %loop, label %endwhile
+}
+
+define i32 @run() {
+entry:
+  %c = alloca double
+  %b = alloca double
+  %a = alloca double
+  %call = call double @argf(i32 0)
+  store double %call, double* %a
+  %call1 = call double @argf(i32 1)
+  store double %call1, double* %b
+  %call2 = call double @argf(i32 2)
+  store double %call2, double* %c
+  call void @__printstr__(i64 140706522079792, i32 10)
+  %a3 = load double, double* %a
+  call void @__printfloat__(double %a3)
+  %b4 = load double, double* %b
+  call void @__printfloat__(double %b4)
+  %c5 = load double, double* %c
+  call void @__printfloat__(double %c5)
+  %c6 = load double, double* %c
+  %call7 = call double @test1(double* %a, double* %b, double %c6)
+  call void @__printstr__(i64 140706522074896, i32 8)
+  %a8 = load double, double* %a
+  call void @__printfloat__(double %a8)
+  %b9 = load double, double* %b
+  call void @__printfloat__(double %b9)
+  %c10 = load double, double* %c
+  call void @__printfloat__(double %c10)
+  ret i32 0
+}

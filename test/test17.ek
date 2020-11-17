@@ -1,0 +1,8 @@
+def int run() {
+    int $x = 1;
+    ref int $y = $x;
+    ref int $z = $y;
+    $z = $z + 7;
+    print($x);
+    return 0;
+}

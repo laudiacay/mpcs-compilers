@@ -561,7 +561,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                             TCType::AtomType(TCAtomType::IntType) => lifted_exp,
                             TCType::AtomType(TCAtomType::FloatType) => {
                                 let cast = self.main_builder.build_cast(
-                                    InstructionOpcode::SIToFP,
+                                    InstructionOpcode::FPToSI,
                                     lifted_exp,
                                     lifted_type,
                                     "cast",
@@ -575,7 +575,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                         match exp.type_ {
                             TCType::AtomType(TCAtomType::IntType) => {
                                 let cast = self.main_builder.build_cast(
-                                    InstructionOpcode::FPToSI,
+                                    InstructionOpcode::SIToFP,
                                     lifted_exp,
                                     lifted_type,
                                     "cast",
