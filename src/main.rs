@@ -59,7 +59,6 @@ fn main() {
             println!("error: {}", msg);
             std::process::exit(1);
         }
-
     } else if matches.is_present("jit") {
         match jit::jit(input_filename, typed_prog) {
             Err(e) => {

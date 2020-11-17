@@ -78,8 +78,6 @@ struct JitDoer<'ctx> {
     execution_engine: ExecutionEngine<'ctx>,
     // is this necessary to store...?
     current_fn_being_compiled: Option<FunctionValue<'ctx>>,
-    // unsure if this remains correct after like injecting instructions... hm
-    current_fn_vdecl_builder: Option<Builder<'ctx>>,
     current_fn_stack_variables: HashMap<String, (PointerValue<'ctx>, TCType)>,
 }
 
@@ -96,7 +94,6 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             main_builder,
             execution_engine,
             current_fn_being_compiled: None,
-            current_fn_vdecl_builder: None,
             current_fn_stack_variables: HashMap::new(),
         };
         ret.gen_print_externs();
@@ -124,10 +121,19 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         tctype: TCType,
         varname: String,
     ) -> Result<PointerValue<'ctx>> {
-        let bldr = self
-            .current_fn_vdecl_builder
-            .as_ref()
-            .ok_or(anyhow!("vdecl builder unset!"))?;
+        let bldr = self.context.create_builder();
+
+        let entry = self
+            .current_fn_being_compiled
+            .unwrap()
+            .get_first_basic_block()
+            .unwrap();
+
+        match entry.get_first_instruction() {
+            Some(first_instr) => bldr.position_before(&first_instr),
+            None => bldr.position_at_end(entry),
+        }
+
         let var_spot = match argtype {
             BasicTypeEnum::FloatType(ft) => bldr.build_alloca(ft, &varname),
             BasicTypeEnum::IntType(it) => bldr.build_alloca(it, &varname),
@@ -175,19 +181,14 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             None => self.context.void_type().fn_type(args.as_slice(), false),
             Some(basictype) => basictype.fn_type(args.as_slice(), false),
         };
-        let fn_ =
-            self.module
-                .add_function(&func.globid.clone(), fn_type, None);
+        let fn_ = self
+            .module
+            .add_function(&func.globid.clone(), fn_type, None);
 
         self.current_fn_being_compiled = Some(fn_);
         self.current_fn_stack_variables = HashMap::new();
         let function_block = self.context.append_basic_block(fn_, "entry");
         self.main_builder.position_at_end(function_block);
-        self.current_fn_vdecl_builder = Some(self.context.create_builder());
-        self.current_fn_vdecl_builder
-            .as_ref()
-            .unwrap()
-            .position_at_end(function_block);
 
         for (i, arg) in fn_.get_param_iter().enumerate() {
             let arg_name = func.args[i].varid.clone();
@@ -196,22 +197,24 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             self.main_builder.build_store(alloca, arg);
         }
 
-        /*
-        for (i, arg) in args.iter().enumerate() {
-            // add space for each argument to the builder
-            self.add_var_spot_to_fn_stack_frame(
-                *arg,
-                func.args[i].type_.clone(),
-                func.args[i].varid.clone(),
-            )?;
-            // TODO store the arguments?
-        }
-        */
+        let last_stmt = &func.blk.stmts.last().clone();
 
-        self.lift_stmt(&TCStmt::Blk(func.blk))
+        if !self.lift_stmt(&TCStmt::Blk(func.blk))? {
+            match ret_type_ {
+                None => self.main_builder.build_return(None),
+                Some(_) => self.main_builder.build_unreachable(),
+            };
+        };
+
+        //if fn_.verify(true) {
+        //    Ok(())
+        //} else {
+        //    Err(anyhow!("function did not verify"))
+        //}
+        Ok(())
     }
 
-    fn lift_stmt(&mut self, stmt: &TCStmt) -> Result<()> {
+    fn lift_stmt(&mut self, stmt: &TCStmt) -> Result<bool> {
         match stmt {
             TCStmt::Blk(blk) => {
                 /*
@@ -229,11 +232,16 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                  */
                 let parent_block_scope = self.current_fn_stack_variables.clone();
 
+                let mut returns = false;
                 for inner_stmt in blk.stmts.iter() {
-                    self.lift_stmt(inner_stmt)?;
+                    if self.lift_stmt(inner_stmt)? {
+                        returns = true;
+                        break;
+                    }
                 }
 
                 self.current_fn_stack_variables = parent_block_scope;
+                Ok(returns)
             }
             TCStmt::ReturnStmt(ret) => {
                 match ret {
@@ -247,7 +255,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     None => {
                         self.main_builder.build_return(None);
                     }
-                }
+                };
+                Ok(true)
             }
             TCStmt::VDeclStmt { vdecl, exp } => {
                 let lifted_type = self.lift_type(vdecl.type_)?.unwrap();
@@ -277,10 +286,12 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 } else {
                     let lifted_exp = self.lift_exp(exp)?.unwrap();
                     self.main_builder.build_store(var, lifted_exp);
-                }
+                };
+                Ok(false)
             }
             TCStmt::ExpStmt(exp) => {
                 self.lift_exp(exp)?;
+                Ok(false)
             }
             TCStmt::WhileStmt { cond, stmt: body } => {
                 // unwrapping this means that a while statement can only be encountered within a
@@ -296,13 +307,15 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
                 // execute body and check condition again
                 self.main_builder.position_at_end(loop_bb);
-                self.lift_stmt(body)?;
-                let end_cond = self.lift_exp(cond)?.unwrap().into_int_value();
-                self.main_builder
-                    .build_conditional_branch(end_cond, loop_bb, post_bb);
+                if !self.lift_stmt(body)? {
+                    let end_cond = self.lift_exp(cond)?.unwrap().into_int_value();
+                    self.main_builder
+                        .build_conditional_branch(end_cond, loop_bb, post_bb);
+                }
 
                 // end of loop
                 self.main_builder.position_at_end(post_bb);
+                Ok(false)
             }
             TCStmt::IfStmt {
                 cond,
@@ -312,37 +325,46 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 let parent = self.current_fn_being_compiled.unwrap();
                 let lifted_cond = self.lift_exp(cond)?.unwrap().into_int_value();
                 let body_bb = self.context.append_basic_block(parent, "if");
-
-                // tried to do this with map but that moves else_stmt
-                let mut else_bb = None;
-                if let Some(_) = else_stmt {
-                    else_bb = Some(self.context.append_basic_block(parent, "else"));
-                }
-
-                let post_bb = self.context.append_basic_block(parent, "endif");
-
-                match else_bb {
-                    Some(else_bb) => {
-                        self.main_builder
-                            .build_conditional_branch(lifted_cond, body_bb, else_bb)
-                    }
+                // if there is only an if,
+                // build it, don't care whether returns for this functions retval
+                // always include postbb and a jump in case
+                match else_stmt {
                     None => {
+                        let post_bb = self.context.append_basic_block(parent, "endif");
                         self.main_builder
-                            .build_conditional_branch(lifted_cond, body_bb, post_bb)
+                            .build_conditional_branch(lifted_cond, body_bb, post_bb);
+                        self.main_builder.position_at_end(body_bb);
+                        if !self.lift_stmt(body)? {
+                            self.main_builder.build_unconditional_branch(post_bb);
+                        }
+                        self.main_builder.position_at_end(post_bb);
+                        Ok(false)
                     }
-                };
-
-                self.main_builder.position_at_end(body_bb);
-                self.lift_stmt(body)?;
-                self.main_builder.build_unconditional_branch(post_bb);
-
-                if let Some(else_bb) = else_bb {
-                    self.main_builder.position_at_end(else_bb);
-                    self.lift_stmt(&else_stmt.as_ref().unwrap())?;
-                    self.main_builder.build_unconditional_branch(post_bb);
-                };
-
-                self.main_builder.position_at_end(post_bb);
+                    Some(real_else_stmt_of_atlanta) => {
+                        let else_bb = self.context.append_basic_block(parent, "else");
+                        self.main_builder
+                            .build_conditional_branch(lifted_cond, body_bb, else_bb);
+                        self.main_builder.position_at_end(body_bb);
+                        let if_returns = self.lift_stmt(body)?;
+                        self.main_builder.position_at_end(else_bb);
+                        let else_returns = self.lift_stmt(real_else_stmt_of_atlanta)?;
+                        if if_returns && else_returns {
+                            Ok(true)
+                        } else {
+                            let post_bb = self.context.append_basic_block(parent, "endif");
+                            if !if_returns {
+                                self.main_builder.position_at_end(body_bb);
+                                self.main_builder.build_unconditional_branch(post_bb);
+                            }
+                            if !else_returns {
+                                self.main_builder.position_at_end(else_bb);
+                                self.main_builder.build_unconditional_branch(post_bb);
+                            }
+                            self.main_builder.position_at_end(post_bb);
+                            Ok(false)
+                        }
+                    }
+                }
             }
             TCStmt::PrintStmt(exp) => {
                 let lifted_exp = self.lift_exp(exp)?.unwrap();
@@ -372,10 +394,10 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     Some(val) => val,
                     None => Err(anyhow!("invalid function call"))?,
                 };
+                Ok(false)
             }
             TCStmt::PrintStmtSlit(strlit) => unimplemented!("todo"),
-        };
-        Ok(())
+        }
     }
 
     // check the type of an expression and get its value
@@ -460,7 +482,6 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             TCExp::BinOp { op, lhs, rhs } => {
                 let lifted_lhs = self.lift_exp(&lhs)?.unwrap();
                 let lifted_rhs = self.lift_exp(&rhs)?.unwrap();
-
                 match (lifted_lhs, lifted_rhs) {
                     (BasicValueEnum::IntValue(lhs_val), BasicValueEnum::IntValue(rhs_val)) => {
                         match op {
@@ -553,9 +574,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                         }
                     }
                     // should be unreachable due to typechecker
-                    _ => Err(anyhow!(
-                        "illegal binop in int-type expression (likely a bug)"
-                    ))?,
+                    _ => Err(anyhow!("mismatched binop types!!"))?,
                 }
             }
             TCExp::UnaryOp { op, exp } => {
@@ -595,9 +614,15 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 let var = self
                     .current_fn_stack_variables
                     .get(varid.as_str())
-                    .unwrap()
-                    .0;
-                self.main_builder.build_load(var, varid.as_str())
+                    .unwrap();
+                match var.1 {
+                    TCType::Ref(_, type_) => {
+                       let loc1 =  self.main_builder.build_load(var.0, varid.as_str());
+                       self.main_builder.build_load(loc1.into_pointer_value(), varid.as_str())
+                    },
+                    TCType::AtomType(_) => self.main_builder.build_load(var.0, varid.as_str()),
+                    _ => Err(anyhow!("void variable spooooky ooooo!!!"))?,
+                }
             }
             TCExp::FuncCall { globid, exps } => {
                 // missing function caught during typechecking
@@ -652,7 +677,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     }
 }
 
-type KaleidoRunFunc = unsafe extern "C" fn(Vec<i32>, Vec<f64>) -> i32;
+type KaleidoRunFunc = unsafe extern "C" fn() -> i32;
 
 fn jit_compile_kaleido_prog<'a>(
     ctxt: &'a Context,
@@ -663,11 +688,11 @@ fn jit_compile_kaleido_prog<'a>(
     let mut jit_doer = JitDoer::init(ctxt, toplvl_filename, OptimizationLevel::None)?;
     for e in ast.externs {
         // what do i do with this???
-        let _ext = jit_doer.lift_extern(e);
+        let _ext = jit_doer.lift_extern(e)?;
     }
     for f in ast.funcs {
         // what do i do with this???
-        let _fn = jit_doer.lift_function(f);
+        let _fn = jit_doer.lift_function(f)?;
     }
     // pull out jitted run function and OFF we go!!
     let efn = unsafe { jit_doer.execution_engine.get_function("run")? };
@@ -677,7 +702,7 @@ fn jit_compile_kaleido_prog<'a>(
 pub fn jit(input_filename: &str, ast: TCProg) -> Result<i32> {
     let ctxt = Context::create();
     let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast)?;
-    Ok(unsafe { func.call(vec![], vec![]) })
+    Ok(unsafe { func.call() })
 }
 
 pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg) -> Result<()> {
@@ -685,11 +710,12 @@ pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg) -> Re
     let mut jit_doer = JitDoer::init(&ctxt, input_filename, OptimizationLevel::None)?;
     for e in ast.externs {
         // what do i do with this???
-        let _ext = jit_doer.lift_extern(e);
+        let _ext = jit_doer.lift_extern(e)?;
     }
     for f in ast.funcs {
         // what do i do with this???
-        let _fn = jit_doer.lift_function(f);
+        let _fn = jit_doer.lift_function(f)?;
+        jit_doer.module.print_to_stderr();
     }
 
     match jit_doer.module.print_to_file(Path::new(output_filename)) {

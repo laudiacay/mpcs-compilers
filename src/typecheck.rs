@@ -323,6 +323,7 @@ fn typecheck_exp(
             match vartype {
                 Some(type_) => {
                     // it makes sense to error on void types here- you would never have a ref to one or try to assign it
+                    let assignment_exp_type_clone = assignment_exp.type_.clone();
                     if maybe_deref(type_.clone())? != maybe_deref(assignment_exp.type_.clone())? {
                         Err(anyhow!(format!("mismatched types in assign statement, varid: {:?}, vartype: {:?}, expression: {:?}", varid, type_, &assignment_exp)))?
                     }
@@ -331,7 +332,7 @@ fn typecheck_exp(
                         exp: Box::new(assignment_exp),
                     };
                     Ok(TypedExp {
-                        type_: type_.clone(),
+                        type_: assignment_exp_type_clone,
                         exp: new_exp,
                     })
                 }
