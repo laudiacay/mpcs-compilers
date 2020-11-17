@@ -9,6 +9,7 @@ use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, InstructionOpcode, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
 use std::collections::HashMap;
+use std::convert::TryInto;
 use std::path::Path;
 // may need pub fn set_triple(&self, triple: &TargetTriple)
 // pub fn write_bitcode_to_path(&self, path: &Path) -> bool
@@ -51,8 +52,9 @@ pub extern "C" fn __printfloat__(f: f64) {
     println!("{}", f);
 }
 #[no_mangle]
-pub extern "C" fn __printstr__(slit: &[u8]) {
-    println!("{}", std::str::from_utf8(slit).unwrap());
+pub extern "C" fn __printstr__(slit: u64) {
+    let stri_bytes = unsafe{ &*(slit as *const String) };
+    println!("{}", stri_bytes);
 }
 
 // making sure rustc doesn't remove arg and argf
@@ -68,7 +70,7 @@ static EXTERNAL_FNS4: [extern "C" fn(bool); 1] = [__printbool__];
 #[used]
 static EXTERNAL_FNS5: [extern "C" fn(f64); 1] = [__printfloat__];
 #[used]
-static EXTERNAL_FNS6: [extern "C" fn(&[u8]); 1] = [__printstr__];
+static EXTERNAL_FNS6: [extern "C" fn(u64); 1] = [__printstr__];
 
 // TODO i have fucked up the lifetimes and am keeping shit around way too long
 struct JitDoer<'ctx> {
@@ -113,6 +115,15 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             self.module
                 .add_function(fn_name, fn_type, Some(Linkage::ExternalWeak));
         }
+        let fn_name = "__printstr__";
+        let target_data = self.execution_engine.get_target_data();
+        let ptr_type = self.context.ptr_sized_int_type(&target_data, None).into();
+        let vec_size_type = self.context.i32_type().into();
+
+        let args: Vec<BasicTypeEnum> = vec![ptr_type, vec_size_type];
+        let fn_type = void_type.fn_type(args.as_slice(), false);
+        self.module
+            .add_function(fn_name, fn_type, Some(Linkage::ExternalWeak));
     }
 
     fn add_var_spot_to_fn_stack_frame(
@@ -387,7 +398,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     .map(|&val| val.into())
                     .collect::<Vec<BasicValueEnum>>();
 
-                self.main_builder.build_call(func, args_arr.as_slice(), "call");
+                self.main_builder
+                    .build_call(func, args_arr.as_slice(), "call");
                 /*
                 match call.try_as_basic_value().left() {
                     Some(val) => val,
@@ -396,7 +408,29 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 */
                 Ok(false)
             }
-            TCStmt::PrintStmtSlit(strlit) => unimplemented!("todo"),
+            TCStmt::PrintStmtSlit(strlit) => {
+                let strlen_arg = self
+                    .context
+                    .i32_type()
+                    .const_int(strlit.len().try_into().unwrap(), false)
+                    .into();
+
+                let target_data = self.execution_engine.get_target_data();
+                let strlit_2 = &strlit[1..strlit.len()-1].to_string();
+                let strlit_box = Box::new(strlit_2.clone());
+                let strlit_box_leaked = Box::leak(strlit_box);
+                let strlit_ptr_arg = self
+                    .context
+                    .ptr_sized_int_type(&target_data, None)
+                    .const_int(strlit_box_leaked as *const String as u64 , false)
+                    .into();
+                let func = self.module.get_function("__printstr__").unwrap();
+                let ptrval = strlit_box_leaked as *const String as u64;
+
+                self.main_builder
+                    .build_call(func, &[strlit_ptr_arg, strlen_arg], "call");
+                Ok(false)
+            }
         }
     }
 
@@ -417,12 +451,17 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
             // lift args
             let mut args = Vec::with_capacity(exps.len());
-            for (i,e) in exps.iter().enumerate() {
-                let param = func.get_nth_param(i as u32).ok_or(anyhow!("couldn't get function parameter"))?;
+            for (i, e) in exps.iter().enumerate() {
+                let param = func
+                    .get_nth_param(i as u32)
+                    .ok_or(anyhow!("couldn't get function parameter"))?;
                 if let BasicValueEnum::PointerValue(_) = param {
                     if let TCExp::VarVal(varid) = &e.exp {
-                        let the_variable = 
-                            self.current_fn_stack_variables.get(varid).ok_or(anyhow!("no such variable (bug)"))?.0;
+                        let the_variable = self
+                            .current_fn_stack_variables
+                            .get(varid)
+                            .ok_or(anyhow!("no such variable (bug)"))?
+                            .0;
                         args.push(BasicValueEnum::PointerValue(the_variable));
                     } else {
                         Err(anyhow!("expected varval in reference type argument"))?;
@@ -439,35 +478,35 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 .map(|&val| val.into())
                 .collect::<Vec<BasicValueEnum>>();
 
-
-            self.main_builder.build_call(func, args_arr.as_slice(), "call");
-            /*
-            let func_opt = self.module.get_function(globid.as_str());
-            if let None = func_opt {
-                // should be unreachable, as this would be caught during typechecking
-                Err(anyhow!("unknown function"))?;
-            }
-            let func = func_opt.unwrap();
-
-            // lift args
-            let mut args = vec![];
-            for e in exps {
-                args.push(self.lift_exp(&e)?);
-            }
-
-            // build call using lifted args
-            // unwrap is safe here because typechecker guarantees function arguments are not void
-            let args_arr = args
-                .iter()
-                .by_ref()
-                .map(|&val| val.unwrap().into())
-                .collect::<Vec<BasicValueEnum>>();
-
-            // don't need to save the value as this is only called for void functions
-            // but do we need to check if the call itself is valid?
             self.main_builder
-                .build_call(func, args_arr.as_slice(), "call"); // wtf is the 'name' supposed to be
-            */
+                .build_call(func, args_arr.as_slice(), "call");
+        /*
+        let func_opt = self.module.get_function(globid.as_str());
+        if let None = func_opt {
+            // should be unreachable, as this would be caught during typechecking
+            Err(anyhow!("unknown function"))?;
+        }
+        let func = func_opt.unwrap();
+
+        // lift args
+        let mut args = vec![];
+        for e in exps {
+            args.push(self.lift_exp(&e)?);
+        }
+
+        // build call using lifted args
+        // unwrap is safe here because typechecker guarantees function arguments are not void
+        let args_arr = args
+            .iter()
+            .by_ref()
+            .map(|&val| val.unwrap().into())
+            .collect::<Vec<BasicValueEnum>>();
+
+        // don't need to save the value as this is only called for void functions
+        // but do we need to check if the call itself is valid?
+        self.main_builder
+            .build_call(func, args_arr.as_slice(), "call"); // wtf is the 'name' supposed to be
+        */
         } else {
             // should be unreachable
             Err(anyhow!(
@@ -641,15 +680,13 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             },
             TCExp::VarVal(varid) => {
                 // typechecker makes sure variable is in scope here
-                let var = self
-                    .current_fn_stack_variables
-                    .get(varid.as_str())
-                    .unwrap();
+                let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap();
                 match var.1 {
                     TCType::Ref(_, type_) => {
-                       let loc1 =  self.main_builder.build_load(var.0, varid.as_str());
-                       self.main_builder.build_load(loc1.into_pointer_value(), varid.as_str())
-                    },
+                        let loc1 = self.main_builder.build_load(var.0, varid.as_str());
+                        self.main_builder
+                            .build_load(loc1.into_pointer_value(), varid.as_str())
+                    }
                     TCType::AtomType(_) => self.main_builder.build_load(var.0, varid.as_str()),
                     _ => Err(anyhow!("void variable spooooky ooooo!!!"))?,
                 }
@@ -660,12 +697,17 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
                 // lift args
                 let mut args = Vec::with_capacity(exps.len());
-                for (i,e) in exps.iter().enumerate() {
-                    let param = func.get_nth_param(i as u32).ok_or(anyhow!("couldn't get function parameter"))?;
+                for (i, e) in exps.iter().enumerate() {
+                    let param = func
+                        .get_nth_param(i as u32)
+                        .ok_or(anyhow!("couldn't get function parameter"))?;
                     if let BasicValueEnum::PointerValue(_) = param {
                         if let TCExp::VarVal(varid) = &e.exp {
-                            let the_variable = 
-                                self.current_fn_stack_variables.get(varid).ok_or(anyhow!("no such variable (bug)"))?.0;
+                            let the_variable = self
+                                .current_fn_stack_variables
+                                .get(varid)
+                                .ok_or(anyhow!("no such variable (bug)"))?
+                                .0;
                             args.push(BasicValueEnum::PointerValue(the_variable));
                         } else {
                             Err(anyhow!("expected varval in reference type argument"))?;
@@ -681,7 +723,6 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     .by_ref()
                     .map(|&val| val.into())
                     .collect::<Vec<BasicValueEnum>>();
-
 
                 let call = self
                     .main_builder
