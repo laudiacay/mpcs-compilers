@@ -1,0 +1,8 @@
+def int run() {
+    int $x = 0;
+    int $y = 1;
+    while ($x < 1000000000)
+        $x = $x + 1;
+    print($y);
+    return 0;
+}

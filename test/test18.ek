@@ -1,0 +1,6 @@
+def int run(){
+    float $y = 1.1;
+    int $x = [int] $y;
+    print($x);
+    return 0;
+}

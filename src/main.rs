@@ -50,13 +50,18 @@ fn main() {
     let out_file = File::create(output_filename)
         .expect(&format!("failed to create output file at {}", output_filename).to_string());
 
+    let mut opt = false;
+    if matches.is_present("O") {
+        opt = true;
+    }
+
     if matches.is_present("emit-ast") {
         if let Err(msg) = serde_yaml::to_writer(out_file, &typed_prog) {
             println!("error: {}", msg);
             std::process::exit(1);
         }
     } else if matches.is_present("emit-llvm") {
-        if let Err(msg) = jit::emit_llvm(input_filename, output_filename, typed_prog) {
+        if let Err(msg) = jit::emit_llvm(input_filename, output_filename, typed_prog, opt) {
             println!("error: {}", msg);
             std::process::exit(1);
         }
@@ -68,7 +73,8 @@ fn main() {
         }
         match jit::jit(input_filename, 
                        typed_prog, 
-                       arg_strings) {
+                       arg_strings,
+                       opt) {
             Err(e) => {
                 println!("error: {}", e);
                 std::process::exit(1);

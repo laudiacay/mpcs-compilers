@@ -5,6 +5,7 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
+use inkwell::passes::{PassManager, PassManagerBuilder};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, InstructionOpcode, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
@@ -808,6 +809,7 @@ fn jit_compile_kaleido_prog<'a>(
     ctxt: &'a Context,
     toplvl_filename: &'a str,
     ast: TCProg,
+    opt: bool,
 ) -> Result<JitFunction<'a, KaleidoRunFunc>> {
     //https://thedan64.github.io/inkwell/inkwell/enum.OptimizationLevel.html
     let mut jit_doer = JitDoer::init(ctxt, toplvl_filename, OptimizationLevel::None)?;
@@ -819,19 +821,24 @@ fn jit_compile_kaleido_prog<'a>(
         // what do i do with this???
         let _fn = jit_doer.lift_function(f)?;
     }
+
+    if opt {
+        optimize(&jit_doer.module);
+    }
+
     // pull out jitted run function and OFF we go!!
     let efn = unsafe { jit_doer.execution_engine.get_function("run")? };
     Ok(efn)
 }
 
-pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>) -> Result<i32> {
+pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool) -> Result<i32> {
     let ctxt = Context::create();
     unsafe { cmd_line_args = args };
-    let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast)?;
+    let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast, opt)?;
     Ok(unsafe { func.call() })
 }
 
-pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg) -> Result<()> {
+pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg, opt: bool) -> Result<()> {
     let ctxt = Context::create();
     let mut jit_doer = JitDoer::init(&ctxt, input_filename, OptimizationLevel::None)?;
     for e in ast.externs {
@@ -843,6 +850,10 @@ pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg) -> Re
         let _fn = jit_doer.lift_function(f)?;
     }
 
+    if opt {
+        optimize(&jit_doer.module);
+    }
+
     match jit_doer.module.print_to_file(Path::new(output_filename)) {
         Ok(_) => Ok(()),
         Err(msg) => {
@@ -850,4 +861,15 @@ pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg) -> Re
             Err(anyhow!("couldn't print module"))
         }
     }
+}
+
+// run the optimization pipeline for the given module
+fn optimize(module: &Module) {
+    let pass_manager_builder = PassManagerBuilder::create();
+    pass_manager_builder.set_optimization_level(OptimizationLevel::Aggressive);
+
+    let fpm = PassManager::create(module);
+    pass_manager_builder.populate_function_pass_manager(&fpm);
+
+    fpm.run_on(&module.get_function("run").unwrap());
 }
