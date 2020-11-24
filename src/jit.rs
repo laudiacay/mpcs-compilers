@@ -30,13 +30,14 @@ pub extern "C" fn kaleido_println() {
 }
 */
 
-static mut cmd_line_args: Vec<String> = vec![];
+static mut CMD_LINE_ARGS: Vec<String> = vec![];
+
 
 #[no_mangle]
 pub extern "C" fn arg(i: i32) -> i32 {
     unsafe { 
-        if i < cmd_line_args.len() as i32 || i < 0 {
-            return cmd_line_args[i as usize].parse().unwrap(); 
+        if i < CMD_LINE_ARGS.len() as i32 || i < 0 {
+            return CMD_LINE_ARGS[i as usize].parse().unwrap(); 
         } else {
             println!("error: argument out of bounds");
             std::process::exit(1);
@@ -47,8 +48,8 @@ pub extern "C" fn arg(i: i32) -> i32 {
 #[no_mangle]
 pub extern "C" fn argf(i: i32) -> f64 {
     unsafe { 
-        if i < cmd_line_args.len() as i32 || i < 0 as i32 {
-            return cmd_line_args[i as usize].parse().unwrap(); 
+        if i < CMD_LINE_ARGS.len() as i32 || i < 0 as i32 {
+            return CMD_LINE_ARGS[i as usize].parse().unwrap(); 
         } else {
             println!("error: argument out of bounds");
             std::process::exit(1);
@@ -224,7 +225,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             self.main_builder.build_store(alloca, arg);
         }
 
-        let last_stmt = &func.blk.stmts.last().clone();
+        let _last_stmt = &func.blk.stmts.last().clone();
 
         if !self.lift_stmt(&TCStmt::Blk(func.blk))? {
             match ret_type_ {
@@ -441,7 +442,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     .const_int(strlit_box_leaked as *const String as u64 , false)
                     .into();
                 let func = self.module.get_function("__printstr__").unwrap();
-                let ptrval = strlit_box_leaked as *const String as u64;
+                let _ptrval = strlit_box_leaked as *const String as u64;
 
                 self.main_builder
                     .build_call(func, &[strlit_ptr_arg, strlen_arg], "call");
@@ -453,7 +454,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     // check the type of an expression and get its value
     fn lift_exp(&self, exp: &TypedExp) -> Result<Option<BasicValueEnum<'ctx>>> {
         match exp.type_ {
-            TCType::AtomType(tca) => self.lift_tcexp(&exp.exp),
+            TCType::AtomType(_tca) => self.lift_tcexp(&exp.exp),
             TCType::VoidType => self.lift_exp_to_void(&exp.exp),
             _ => Err(anyhow!(
                 "typed expression with reference type (likely a bug)"
@@ -726,7 +727,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 // typechecker makes sure variable is in scope here
                 let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap();
                 match var.1 {
-                    TCType::Ref(_, type_) => {
+                    TCType::Ref(_, _type_) => {
+                        
                         let loc1 = self.main_builder.build_load(var.0, varid.as_str());
                         self.main_builder
                             .build_load(loc1.into_pointer_value(), varid.as_str())
@@ -785,7 +787,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             TCType::AtomType(type_) => Some(self.lift_atom_type(type_)?),
             TCType::VoidType => None,
             // TODO: WHAT IS HAPPENING WITH NOALIAS????
-            TCType::Ref(noalias, type_) => Some(
+            TCType::Ref(_noalias, type_) => Some(
                 self.lift_atom_type(type_)?
                     .ptr_type(AddressSpace::Generic)
                     .into(),
@@ -833,7 +835,7 @@ fn jit_compile_kaleido_prog<'a>(
 
 pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool) -> Result<i32> {
     let ctxt = Context::create();
-    unsafe { cmd_line_args = args };
+    unsafe { CMD_LINE_ARGS= args };
     let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast, opt)?;
     Ok(unsafe { func.call() })
 }
@@ -870,6 +872,14 @@ fn optimize(module: &Module) {
 
     let fpm = PassManager::create(module);
     pass_manager_builder.populate_function_pass_manager(&fpm);
+    let mut maybe_cur_fn = module.get_first_function();
+    loop {
+        if let Some(cur_fn) = maybe_cur_fn {
+            fpm.run_on(&cur_fn);
+            maybe_cur_fn = cur_fn.get_next_function();
+        } else {
+            break;
+        }
+    }
 
-    fpm.run_on(&module.get_function("run").unwrap());
 }
