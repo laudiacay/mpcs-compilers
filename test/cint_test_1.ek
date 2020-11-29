@@ -1,0 +1,10 @@
+# invalid, because 2 is treated as an int and is missing a cast to cint
+def cint add2 (cint $x) {
+    cint $rv = $x + 2;
+    return $rv;
+}
+# valid, since the literal 2 is explicitly cast to cint
+def cint add2 (cint $x) {
+    cint $rv = $x + [cint] 2;
+    return $rv;
+}

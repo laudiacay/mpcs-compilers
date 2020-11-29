@@ -560,7 +560,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 // from https://llvm.org/docs/LangRef.html#bitcast-to-instruction bitcast means to
                 // cast w/o changing any bits
                 match type_ {
-                    TCType::AtomType(TCAtomType::IntType) => match exp.type_ {
+                    TCType::AtomType(TCAtomType::IntType) | TCType::AtomType(TCAtomType::CIntType) => match exp.type_ {
                         TCType::AtomType(TCAtomType::IntType) => lifted_exp,
                         TCType::AtomType(TCAtomType::FloatType) => {
                             let cast = self.main_builder.build_cast(
@@ -570,14 +570,11 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                                 "cast",
                             );
                             cast
-                        }
-                        TCType::AtomType(TCAtomType::CIntType) => {
-                            unimplemented!("cint");
-                        }
+                        },
                         _ => Err(anyhow!("unsupported cast"))?,
                     },
                     TCType::AtomType(TCAtomType::FloatType) => match exp.type_ {
-                        TCType::AtomType(TCAtomType::IntType) => {
+                        TCType::AtomType(TCAtomType::IntType) | TCType::AtomType(TCAtomType::CIntType) => {
                             let cast = self.main_builder.build_cast(
                                 InstructionOpcode::SIToFP,
                                 lifted_exp,
@@ -587,17 +584,6 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                             cast
                         }
                         TCType::AtomType(TCAtomType::FloatType) => lifted_exp,
-                        TCType::AtomType(TCAtomType::CIntType) => {
-                            unimplemented!("cint");
-                        }
-                        _ => Err(anyhow!("unsupported cast"))?,
-                    },
-                    TCType::AtomType(TCAtomType::CIntType) => match exp.type_ {
-                        TCType::AtomType(TCAtomType::IntType) => {
-                            unimplemented!("cint");
-                        }
-                        TCType::AtomType(TCAtomType::FloatType) => unimplemented!("cint"),
-                        TCType::AtomType(TCAtomType::CIntType) => lifted_exp,
                         _ => Err(anyhow!("unsupported cast"))?,
                     },
                     TCType::AtomType(TCAtomType::BoolType) => lifted_exp,
