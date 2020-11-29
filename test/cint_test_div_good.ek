@@ -1,0 +1,7 @@
+def int run() {
+    cint $x = [cint] -5;
+    cint $int_min = $x - [cint] 1;
+    cint $negative_one = [cint] -1;
+    print($int_min / $negative_one);
+    return 0;
+}

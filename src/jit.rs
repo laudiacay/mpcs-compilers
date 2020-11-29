@@ -105,6 +105,16 @@ pub extern "C" fn __smul__(a: i32, b: i32) -> i32 {
     }
 }
 
+#[no_mangle]
+pub extern "C" fn __sdiv__(a: i32, b: i32) -> i32 {
+    if let Some(ans) = a.checked_div(b) {
+        ans
+    } else {
+        println!("error: checked div overflowed");
+        std::process::exit(1);
+    }
+}
+
 // making sure rustc doesn't remove arg and argf
 #[used]
 static EXTERNAL_FNS1: [extern "C" fn(i32) -> i32; 1] = [arg];
@@ -120,7 +130,7 @@ static EXTERNAL_FNS5: [extern "C" fn(f64); 1] = [__printfloat__];
 #[used]
 static EXTERNAL_FNS6: [extern "C" fn(u64); 1] = [__printstr__];
 #[used]
-static EXTERNAL_FNS7: [extern "C" fn(i32, i32) -> i32; 3] = [__sadd__, __ssub__, __smul__];
+static EXTERNAL_FNS7: [extern "C" fn(i32, i32) -> i32; 4] = [__sadd__, __ssub__, __smul__, __sdiv__];
 
 struct JitDoer<'ctx> {
     context: &'ctx Context,
@@ -186,6 +196,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             .add_function("__ssub__", fn_type, Some(Linkage::ExternalWeak));
         self.module
             .add_function("__smul__", fn_type, Some(Linkage::ExternalWeak));
+        self.module
+            .add_function("__sdiv__", fn_type, Some(Linkage::ExternalWeak));
     }
 
     fn add_var_spot_to_fn_stack_frame(
@@ -691,9 +703,21 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                                     .expect("error: failed checked mul")
                                     .into_int_value()
                             }),
-                            BOp::Div => BasicValueEnum::IntValue(
+                            BOp::Div => BasicValueEnum::IntValue(if !checked_overflow{
+                                self.main_builder.build_int_signed_div(lhs_val, rhs_val, "div")
+                            } else {
+                                let func = self.module.get_function("__sdiv__").unwrap();
                                 self.main_builder
-                                    .build_int_signed_div(lhs_val, rhs_val, "div"),
+                                    .build_call(
+                                        func,
+                                        vec![lifted_lhs, lifted_rhs].as_slice(),
+                                        "call",
+                                    )
+                                    .try_as_basic_value()
+                                    .left()
+                                    .expect("error: failed checked div")
+                                    .into_int_value()
+                            }
                             ),
                             BOp::EqTo => {
                                 BasicValueEnum::IntValue(self.main_builder.build_int_compare(
