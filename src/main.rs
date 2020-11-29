@@ -71,10 +71,7 @@ fn main() {
         for a in matches.values_of("args").unwrap_or(Values::default()) {
             arg_strings.push(a.to_string());
         }
-        match jit::jit(input_filename, 
-                       typed_prog, 
-                       arg_strings,
-                       opt) {
+        match jit::jit(input_filename, typed_prog, arg_strings, opt) {
             Err(e) => {
                 println!("error: {}", e);
                 std::process::exit(1);

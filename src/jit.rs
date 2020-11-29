@@ -1,5 +1,7 @@
 use crate::ast::{BOp, Lit, UOp};
-use crate::typecheck::{TCAtomType, TCExp, TCExtern, TCFunc, TCProg, TCStmt, TCType, TypedExp};
+use crate::typecheck::{
+    maybe_deref, TCAtomType, TCExp, TCExtern, TCFunc, TCProg, TCStmt, TCType, TypedExp,
+};
 use anyhow::{anyhow, Result};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -32,12 +34,11 @@ pub extern "C" fn kaleido_println() {
 
 static mut CMD_LINE_ARGS: Vec<String> = vec![];
 
-
 #[no_mangle]
 pub extern "C" fn arg(i: i32) -> i32 {
-    unsafe { 
+    unsafe {
         if i < CMD_LINE_ARGS.len() as i32 || i < 0 {
-            return CMD_LINE_ARGS[i as usize].parse().unwrap(); 
+            return CMD_LINE_ARGS[i as usize].parse().unwrap();
         } else {
             println!("error: argument out of bounds");
             std::process::exit(1);
@@ -47,9 +48,9 @@ pub extern "C" fn arg(i: i32) -> i32 {
 
 #[no_mangle]
 pub extern "C" fn argf(i: i32) -> f64 {
-    unsafe { 
+    unsafe {
         if i < CMD_LINE_ARGS.len() as i32 || i < 0 as i32 {
-            return CMD_LINE_ARGS[i as usize].parse().unwrap(); 
+            return CMD_LINE_ARGS[i as usize].parse().unwrap();
         } else {
             println!("error: argument out of bounds");
             std::process::exit(1);
@@ -71,7 +72,7 @@ pub extern "C" fn __printfloat__(f: f64) {
 }
 #[no_mangle]
 pub extern "C" fn __printstr__(slit: u64) {
-    let stri_bytes = unsafe{ &*(slit as *const String) };
+    let stri_bytes = unsafe { &*(slit as *const String) };
     println!("{}", stri_bytes);
 }
 
@@ -400,7 +401,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     TCType::AtomType(TCAtomType::IntType) => "__printint__",
                     TCType::AtomType(TCAtomType::BoolType) => "__printbool__",
                     TCType::AtomType(TCAtomType::FloatType) => "__printfloat__",
-                    _ => unimplemented!("awoooo~"),
+                    TCType::AtomType(TCAtomType::CIntType) => "__printint__",
+                    _ => unimplemented!("cant print refs yikes"),
                 };
 
                 let func = self.module.get_function(globid).unwrap();
@@ -433,13 +435,13 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     .into();
 
                 let target_data = self.execution_engine.get_target_data();
-                let strlit_2 = &strlit[1..strlit.len()-1].to_string();
+                let strlit_2 = &strlit[1..strlit.len() - 1].to_string();
                 let strlit_box = Box::new(strlit_2.clone());
                 let strlit_box_leaked = Box::leak(strlit_box);
                 let strlit_ptr_arg = self
                     .context
                     .ptr_sized_int_type(&target_data, None)
-                    .const_int(strlit_box_leaked as *const String as u64 , false)
+                    .const_int(strlit_box_leaked as *const String as u64, false)
                     .into();
                 let func = self.module.get_function("__printstr__").unwrap();
                 let _ptrval = strlit_box_leaked as *const String as u64;
@@ -558,39 +560,48 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 // from https://llvm.org/docs/LangRef.html#bitcast-to-instruction bitcast means to
                 // cast w/o changing any bits
                 match type_ {
-                    TCType::AtomType(TCAtomType::IntType) => {
-                        match exp.type_ {
-                            TCType::AtomType(TCAtomType::IntType) => lifted_exp,
-                            TCType::AtomType(TCAtomType::FloatType) => {
-                                let cast = self.main_builder.build_cast(
-                                    InstructionOpcode::FPToSI,
-                                    lifted_exp,
-                                    lifted_type,
-                                    "cast",
-                                );
-                                cast
-                            },
-                            _ => unimplemented!("unsupported cast"),
+                    TCType::AtomType(TCAtomType::IntType) => match exp.type_ {
+                        TCType::AtomType(TCAtomType::IntType) => lifted_exp,
+                        TCType::AtomType(TCAtomType::FloatType) => {
+                            let cast = self.main_builder.build_cast(
+                                InstructionOpcode::FPToSI,
+                                lifted_exp,
+                                lifted_type,
+                                "cast",
+                            );
+                            cast
                         }
-                    },
-                    TCType::AtomType(TCAtomType::FloatType) => {
-                        match exp.type_ {
-                            TCType::AtomType(TCAtomType::IntType) => {
-                                let cast = self.main_builder.build_cast(
-                                    InstructionOpcode::SIToFP,
-                                    lifted_exp,
-                                    lifted_type,
-                                    "cast",
-                                );
-                                cast
-                            },
-                            TCType::AtomType(TCAtomType::FloatType) => lifted_exp,
-                            _ => unimplemented!("unsupported cast"),
+                        TCType::AtomType(TCAtomType::CIntType) => {
+                            unimplemented!("cint");
                         }
+                        _ => Err(anyhow!("unsupported cast"))?,
                     },
-                    TCType::AtomType(TCAtomType::CIntType) => unimplemented!("unsupported cint"),
+                    TCType::AtomType(TCAtomType::FloatType) => match exp.type_ {
+                        TCType::AtomType(TCAtomType::IntType) => {
+                            let cast = self.main_builder.build_cast(
+                                InstructionOpcode::SIToFP,
+                                lifted_exp,
+                                lifted_type,
+                                "cast",
+                            );
+                            cast
+                        }
+                        TCType::AtomType(TCAtomType::FloatType) => lifted_exp,
+                        TCType::AtomType(TCAtomType::CIntType) => {
+                            unimplemented!("cint");
+                        }
+                        _ => Err(anyhow!("unsupported cast"))?,
+                    },
+                    TCType::AtomType(TCAtomType::CIntType) => match exp.type_ {
+                        TCType::AtomType(TCAtomType::IntType) => {
+                            unimplemented!("cint");
+                        }
+                        TCType::AtomType(TCAtomType::FloatType) => unimplemented!("cint"),
+                        TCType::AtomType(TCAtomType::CIntType) => lifted_exp,
+                        _ => Err(anyhow!("unsupported cast"))?,
+                    },
                     TCType::AtomType(TCAtomType::BoolType) => lifted_exp,
-                    _ => unimplemented!("nonatomic type came out of casted expression. hm what")
+                    _ => Err(anyhow!("nonatomic type came out of cast, this makes no sense,"))?,
                 }
             }
             TCExp::BinOp { op, lhs, rhs } => {
@@ -598,16 +609,24 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 let lifted_rhs = self.lift_exp(&rhs)?.unwrap();
                 match (lifted_lhs, lifted_rhs) {
                     (BasicValueEnum::IntValue(lhs_val), BasicValueEnum::IntValue(rhs_val)) => {
+                        let checked_overflow = maybe_deref(lhs.type_)? == TCAtomType::CIntType;
+
                         match op {
-                            BOp::Add => BasicValueEnum::IntValue(
-                                self.main_builder.build_int_add(lhs_val, rhs_val, "add"),
-                            ),
-                            BOp::Sub => BasicValueEnum::IntValue(
-                                self.main_builder.build_int_sub(lhs_val, rhs_val, "sub"),
-                            ),
-                            BOp::Mult => BasicValueEnum::IntValue(
-                                self.main_builder.build_int_mul(lhs_val, rhs_val, "mul"),
-                            ),
+                            BOp::Add => BasicValueEnum::IntValue(if !checked_overflow {
+                                self.main_builder.build_int_add(lhs_val, rhs_val, "add")
+                            } else {
+                                unimplemented!("cint");
+                            }),
+                            BOp::Sub => BasicValueEnum::IntValue(if !checked_overflow {
+                                self.main_builder.build_int_sub(lhs_val, rhs_val, "sub")
+                            } else {
+                                unimplemented!("cint");
+                            }),
+                            BOp::Mult => BasicValueEnum::IntValue(if !checked_overflow {
+                                self.main_builder.build_int_mul(lhs_val, rhs_val, "mul")
+                            } else {
+                                unimplemented!("cint");
+                            }),
                             BOp::Div => BasicValueEnum::IntValue(
                                 self.main_builder
                                     .build_int_signed_div(lhs_val, rhs_val, "div"),
@@ -728,7 +747,6 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 let var = self.current_fn_stack_variables.get(varid.as_str()).unwrap();
                 match var.1 {
                     TCType::Ref(_, _type_) => {
-                        
                         let loc1 = self.main_builder.build_load(var.0, varid.as_str());
                         self.main_builder
                             .build_load(loc1.into_pointer_value(), varid.as_str())
@@ -835,12 +853,17 @@ fn jit_compile_kaleido_prog<'a>(
 
 pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool) -> Result<i32> {
     let ctxt = Context::create();
-    unsafe { CMD_LINE_ARGS= args };
+    unsafe { CMD_LINE_ARGS = args };
     let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast, opt)?;
     Ok(unsafe { func.call() })
 }
 
-pub fn emit_llvm(input_filename: &str, output_filename: &str, ast: TCProg, opt: bool) -> Result<()> {
+pub fn emit_llvm(
+    input_filename: &str,
+    output_filename: &str,
+    ast: TCProg,
+    opt: bool,
+) -> Result<()> {
     let ctxt = Context::create();
     let mut jit_doer = JitDoer::init(&ctxt, input_filename, OptimizationLevel::None)?;
     for e in ast.externs {
@@ -881,5 +904,4 @@ fn optimize(module: &Module) {
             break;
         }
     }
-
 }

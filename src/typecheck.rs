@@ -305,7 +305,7 @@ pub enum TCExp {
 }
 
 // atom types become atom types, ref types become atoms, void types error
-fn maybe_deref(type_: TCType) -> Result<TCAtomType> {
+pub fn maybe_deref(type_: TCType) -> Result<TCAtomType> {
     match type_ {
         TCType::AtomType(tca) => Ok(tca),
         TCType::VoidType => Err(anyhow!("cannot deref voidtype")),
