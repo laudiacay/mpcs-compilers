@@ -1,0 +1,9 @@
+# should overflow and error
+def cint mul2 (cint $x) {
+    cint $rv = $x * [cint] 2;
+    return $rv;
+}
+def int run () {
+    print mul2([cint] 2147483647);
+    return 0;
+}

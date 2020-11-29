@@ -1,9 +1,9 @@
-# valid, since the literal 2 is explicitly cast to cint
+# should overflow and error
 def cint add2 (cint $x) {
     cint $rv = $x + [cint] 2;
     return $rv;
 }
 def int run () {
-    print add2([cint] 3);
+    print add2([cint] 2147483647);
     return 0;
 }

@@ -1,0 +1,13 @@
+# should overflow and error
+def cint negbad (cint $x) {
+    cint $rv = - $x;
+    return $rv;
+}
+def int run () {
+    int $x = -1 * 2147483647 - 1;
+    print $x;
+    print -$x;
+    print -($x+1);
+    print negbad([cint] $x);
+    return 0;
+}

@@ -178,13 +178,14 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
     fn gen_signed_extern(&self) {
         let i32_type = self.context.i32_type();
-        let target_data = self.execution_engine.get_target_data();
-        let ptr_type = self.context.ptr_sized_int_type(&target_data, None).into();
-        let args : Vec<BasicTypeEnum> = vec![i32_type.into(), i32_type.into()];
+        let args: Vec<BasicTypeEnum> = vec![i32_type.into(), i32_type.into()];
         let fn_type = i32_type.fn_type(args.as_slice(), false);
-        self.module.add_function("__sadd__", fn_type, Some(Linkage::ExternalWeak));
-        self.module.add_function("__ssub__", fn_type, Some(Linkage::ExternalWeak));
-        self.module.add_function("__smul__", fn_type, Some(Linkage::ExternalWeak));
+        self.module
+            .add_function("__sadd__", fn_type, Some(Linkage::ExternalWeak));
+        self.module
+            .add_function("__ssub__", fn_type, Some(Linkage::ExternalWeak));
+        self.module
+            .add_function("__smul__", fn_type, Some(Linkage::ExternalWeak));
     }
 
     fn add_var_spot_to_fn_stack_frame(
@@ -603,7 +604,8 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 // from https://llvm.org/docs/LangRef.html#bitcast-to-instruction bitcast means to
                 // cast w/o changing any bits
                 match type_ {
-                    TCType::AtomType(TCAtomType::IntType) | TCType::AtomType(TCAtomType::CIntType) => match exp.type_ {
+                    TCType::AtomType(TCAtomType::IntType)
+                    | TCType::AtomType(TCAtomType::CIntType) => match exp.type_ {
                         TCType::AtomType(TCAtomType::IntType) => lifted_exp,
                         TCType::AtomType(TCAtomType::FloatType) => {
                             let cast = self.main_builder.build_cast(
@@ -613,11 +615,12 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                                 "cast",
                             );
                             cast
-                        },
+                        }
                         _ => Err(anyhow!("unsupported cast"))?,
                     },
                     TCType::AtomType(TCAtomType::FloatType) => match exp.type_ {
-                        TCType::AtomType(TCAtomType::IntType) | TCType::AtomType(TCAtomType::CIntType) => {
+                        TCType::AtomType(TCAtomType::IntType)
+                        | TCType::AtomType(TCAtomType::CIntType) => {
                             let cast = self.main_builder.build_cast(
                                 InstructionOpcode::SIToFP,
                                 lifted_exp,
@@ -630,7 +633,9 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                         _ => Err(anyhow!("unsupported cast"))?,
                     },
                     TCType::AtomType(TCAtomType::BoolType) => lifted_exp,
-                    _ => Err(anyhow!("nonatomic type came out of cast, this makes no sense,"))?,
+                    _ => Err(anyhow!(
+                        "nonatomic type came out of cast, this makes no sense,"
+                    ))?,
                 }
             }
             TCExp::BinOp { op, lhs, rhs } => {
@@ -644,20 +649,47 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                             BOp::Add => BasicValueEnum::IntValue(if !checked_overflow {
                                 self.main_builder.build_int_add(lhs_val, rhs_val, "add")
                             } else {
+                                let func = self.module.get_function("__sadd__").unwrap();
                                 self.main_builder
-                                    .build_call("__sadd__", vec![lifted_lhs, lifted_rhs].as_slice(), "call")
+                                    .build_call(
+                                        func,
+                                        vec![lifted_lhs, lifted_rhs].as_slice(),
+                                        "call",
+                                    )
+                                    .try_as_basic_value()
+                                    .left()
+                                    .expect("error: failed checked add")
+                                    .into_int_value()
                             }),
                             BOp::Sub => BasicValueEnum::IntValue(if !checked_overflow {
                                 self.main_builder.build_int_sub(lhs_val, rhs_val, "sub")
                             } else {
+                                let func = self.module.get_function("__ssub__").unwrap();
                                 self.main_builder
-                                    .build_call("__ssub__", vec![lifted_lhs, lifted_rhs].as_slice(), "call")
+                                    .build_call(
+                                        func,
+                                        vec![lifted_lhs, lifted_rhs].as_slice(),
+                                        "call",
+                                    )
+                                    .try_as_basic_value()
+                                    .left()
+                                    .expect("error: failed checked sub")
+                                    .into_int_value()
                             }),
                             BOp::Mult => BasicValueEnum::IntValue(if !checked_overflow {
                                 self.main_builder.build_int_mul(lhs_val, rhs_val, "mul")
                             } else {
+                                let func = self.module.get_function("__smul__").unwrap();
                                 self.main_builder
-                                    .build_call("__smul__", vec![lifted_lhs, lifted_rhs].as_slice(), "call")
+                                    .build_call(
+                                        func,
+                                        vec![lifted_lhs, lifted_rhs].as_slice(),
+                                        "call",
+                                    )
+                                    .try_as_basic_value()
+                                    .left()
+                                    .expect("error: failed checked mul")
+                                    .into_int_value()
                             }),
                             BOp::Div => BasicValueEnum::IntValue(
                                 self.main_builder
@@ -748,7 +780,21 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 match lifted_exp {
                     BasicValueEnum::IntValue(val) => match op {
                         UOp::SignedNeg => {
-                            BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "neg"))
+                            let checked_overflow = maybe_deref(exp.type_)? == TCAtomType::CIntType;
+                            if !checked_overflow {
+                                BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "neg"))
+                            } else {
+                                let func = self.module.get_function("__ssub__").unwrap();
+                                self.main_builder
+                                    .build_call(
+                                        func,
+                                        vec![self.context.i32_type().const_int(0, false).into(), lifted_exp].as_slice(),
+                                        "call",
+                                    )
+                                    .try_as_basic_value()
+                                    .left()
+                                    .expect("error: failed checked signed negation")
+                            }
                         }
                         UOp::BitwiseNeg => {
                             BasicValueEnum::IntValue(self.main_builder.build_not(val, "not"))
@@ -847,8 +893,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
 
     fn lift_atom_type(&self, type_: TCAtomType) -> Result<BasicTypeEnum<'ctx>> {
         Ok(match type_ {
-            TCAtomType::IntType => self.context.i32_type().into(),
-            TCAtomType::CIntType => Err(anyhow!("cints not supported yet"))?,
+            TCAtomType::IntType | TCAtomType::CIntType => self.context.i32_type().into(),
             TCAtomType::FloatType => self.context.f64_type().into(),
             TCAtomType::BoolType => self.context.bool_type().into(),
         })

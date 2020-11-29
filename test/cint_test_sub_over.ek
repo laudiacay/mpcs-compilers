@@ -1,0 +1,10 @@
+# should underflow and error
+
+def cint sub2(cint $x) {
+    cint $rv = $x - [cint] 2;
+    return $rv;
+}
+def int run () {
+    print sub2([cint] -2147483647);
+    return 0;
+}
