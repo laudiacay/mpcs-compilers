@@ -75,6 +75,35 @@ pub extern "C" fn __printstr__(slit: u64) {
     let stri_bytes = unsafe { &*(slit as *const String) };
     println!("{}", stri_bytes);
 }
+#[no_mangle]
+pub extern "C" fn __sadd__(a: i32, b: i32) -> i32 {
+    if let Some(ans) = a.checked_add(b) {
+        ans
+    } else {
+        println!("error: checked add overflowed");
+        std::process::exit(1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn __ssub__(a: i32, b: i32) -> i32 {
+    if let Some(ans) = a.checked_sub(b) {
+        ans
+    } else {
+        println!("error: checked sub overflowed");
+        std::process::exit(1);
+    }
+}
+
+#[no_mangle]
+pub extern "C" fn __smul__(a: i32, b: i32) -> i32 {
+    if let Some(ans) = a.checked_mul(b) {
+        ans
+    } else {
+        println!("error: checked mul overflowed");
+        std::process::exit(1);
+    }
+}
 
 // making sure rustc doesn't remove arg and argf
 #[used]
@@ -90,6 +119,8 @@ static EXTERNAL_FNS4: [extern "C" fn(bool); 1] = [__printbool__];
 static EXTERNAL_FNS5: [extern "C" fn(f64); 1] = [__printfloat__];
 #[used]
 static EXTERNAL_FNS6: [extern "C" fn(u64); 1] = [__printstr__];
+#[used]
+static EXTERNAL_FNS7: [extern "C" fn(i32, i32) -> i32; 3] = [__sadd__, __ssub__, __smul__];
 
 struct JitDoer<'ctx> {
     context: &'ctx Context,
@@ -117,6 +148,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
             current_fn_stack_variables: HashMap::new(),
         };
         ret.gen_print_externs();
+        ret.gen_signed_extern();
         Ok(ret)
     }
 
@@ -142,6 +174,17 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
         let fn_type = void_type.fn_type(args.as_slice(), false);
         self.module
             .add_function(fn_name, fn_type, Some(Linkage::ExternalWeak));
+    }
+
+    fn gen_signed_extern(&self) {
+        let i32_type = self.context.i32_type();
+        let target_data = self.execution_engine.get_target_data();
+        let ptr_type = self.context.ptr_sized_int_type(&target_data, None).into();
+        let args : Vec<BasicTypeEnum> = vec![i32_type.into(), i32_type.into()];
+        let fn_type = i32_type.fn_type(args.as_slice(), false);
+        self.module.add_function("__sadd__", fn_type, Some(Linkage::ExternalWeak));
+        self.module.add_function("__ssub__", fn_type, Some(Linkage::ExternalWeak));
+        self.module.add_function("__smul__", fn_type, Some(Linkage::ExternalWeak));
     }
 
     fn add_var_spot_to_fn_stack_frame(
@@ -601,17 +644,20 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                             BOp::Add => BasicValueEnum::IntValue(if !checked_overflow {
                                 self.main_builder.build_int_add(lhs_val, rhs_val, "add")
                             } else {
-                                unimplemented!("cint");
+                                self.main_builder
+                                    .build_call("__sadd__", vec![lifted_lhs, lifted_rhs].as_slice(), "call")
                             }),
                             BOp::Sub => BasicValueEnum::IntValue(if !checked_overflow {
                                 self.main_builder.build_int_sub(lhs_val, rhs_val, "sub")
                             } else {
-                                unimplemented!("cint");
+                                self.main_builder
+                                    .build_call("__ssub__", vec![lifted_lhs, lifted_rhs].as_slice(), "call")
                             }),
                             BOp::Mult => BasicValueEnum::IntValue(if !checked_overflow {
                                 self.main_builder.build_int_mul(lhs_val, rhs_val, "mul")
                             } else {
-                                unimplemented!("cint");
+                                self.main_builder
+                                    .build_call("__smul__", vec![lifted_lhs, lifted_rhs].as_slice(), "call")
                             }),
                             BOp::Div => BasicValueEnum::IntValue(
                                 self.main_builder
