@@ -2,6 +2,7 @@ use crate::ast::{BOp, Lit, UOp};
 use crate::typecheck::{
     maybe_deref, TCAtomType, TCExp, TCExtern, TCFunc, TCProg, TCStmt, TCType, TypedExp,
 };
+use crate::optimize::{OFlags, run_pipeline, run_default_pipeline};
 use anyhow::{anyhow, Result};
 use inkwell::builder::Builder;
 use inkwell::context::Context;
@@ -991,18 +992,5 @@ pub fn emit_llvm(
 
 // run the optimization pipeline for the given module
 fn optimize(module: &Module) {
-    let pass_manager_builder = PassManagerBuilder::create();
-    pass_manager_builder.set_optimization_level(OptimizationLevel::Aggressive);
-
-    let fpm = PassManager::create(module);
-    pass_manager_builder.populate_function_pass_manager(&fpm);
-    let mut maybe_cur_fn = module.get_first_function();
-    loop {
-        if let Some(cur_fn) = maybe_cur_fn {
-            fpm.run_on(&cur_fn);
-            maybe_cur_fn = cur_fn.get_next_function();
-        } else {
-            break;
-        }
-    }
+    run_default_pipeline(module);
 }
