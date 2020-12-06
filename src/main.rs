@@ -23,6 +23,8 @@ fn main() {
             Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'").conflicts_with("emit-llvm"),
             Arg::from_usage("--jit 'JIT compile and run the code in input-file, any program output will go into output-file'").conflicts_with("emit-llvm").conflicts_with("emit-ast"),
             Arg::from_usage("--emit-llvm 'produce the LLVM IR (unoptimized unless -O is provided)'"),
+            Arg::from_usage("--argument-promotion ''").conflicts_with("O"),
+            Arg::from_usage("-f [flag]... 'apply the specified optimization during compilation'").conflicts_with("O"),
             Arg::from_usage("-o <output-file> 'required output file'"),
             Arg::from_usage("<input-file> 'sets the input file to use'"),
             Arg::from_usage("[args]... 'arguments to pass to just-in-time compiled program'"),
@@ -56,13 +58,33 @@ fn main() {
         opt = true;
     }
 
+    let mut oflags = optimize::OFlags::default();
+    for f in matches.values_of("f").unwrap_or(Values::default()) {
+        match f {
+            "argument_promotion"         => oflags.argument_promotion = true,
+            "type_based_alias_analysis"  => oflags.type_based_alias_analysis = true,
+            "function_inlining"          => oflags.function_inlining = true,
+            "cfg_simplification"         => oflags.cfg_simplification = true,
+            "aggressive_dce"             => oflags.aggressive_dce = true,
+            "strip_dead_prototypes"      => oflags.strip_dead_prototypes = true,
+            "ind_var_simplify"           => oflags.ind_var_simplify = true,
+            "loop_vectorize"             => oflags.loop_vectorize = true,
+            "reassociate"                => oflags.reassociate = true,
+            "sccp"                       => oflags.sccp = true,
+            "instruction_combining"      => oflags.instruction_combining = true,
+            "promote_memory_to_register" => oflags.promote_memory_to_register = true,
+            "dead_arg_elimination"       => oflags.dead_arg_elimination = true,
+            _ => (),
+        }
+    }
+
     if matches.is_present("emit-ast") {
         if let Err(msg) = serde_yaml::to_writer(out_file, &typed_prog) {
             println!("error: {}", msg);
             std::process::exit(1);
         }
     } else if matches.is_present("emit-llvm") {
-        if let Err(msg) = jit::emit_llvm(input_filename, output_filename, typed_prog, opt) {
+        if let Err(msg) = jit::emit_llvm(input_filename, output_filename, typed_prog, opt, oflags) {
             println!("error: {}", msg);
             std::process::exit(1);
         }
@@ -72,7 +94,7 @@ fn main() {
         for a in matches.values_of("args").unwrap_or(Values::default()) {
             arg_strings.push(a.to_string());
         }
-        match jit::jit(input_filename, typed_prog, arg_strings, opt) {
+        match jit::jit(input_filename, typed_prog, arg_strings, opt, oflags) {
             Err(e) => {
                 println!("error: {}", e);
                 std::process::exit(1);

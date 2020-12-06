@@ -8,7 +8,6 @@ use inkwell::builder::Builder;
 use inkwell::context::Context;
 use inkwell::execution_engine::{ExecutionEngine, JitFunction};
 use inkwell::module::{Linkage, Module};
-use inkwell::passes::{PassManager, PassManagerBuilder};
 use inkwell::types::{BasicType, BasicTypeEnum};
 use inkwell::values::{BasicValueEnum, FunctionValue, InstructionOpcode, PointerValue};
 use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
@@ -932,6 +931,7 @@ fn jit_compile_kaleido_prog<'a>(
     toplvl_filename: &'a str,
     ast: TCProg,
     opt: bool,
+    oflags: OFlags,
 ) -> Result<JitFunction<'a, KaleidoRunFunc>> {
     //https://thedan64.github.io/inkwell/inkwell/enum.OptimizationLevel.html
     let mut jit_doer = JitDoer::init(ctxt, toplvl_filename, OptimizationLevel::None)?;
@@ -946,6 +946,8 @@ fn jit_compile_kaleido_prog<'a>(
 
     if opt {
         optimize(&jit_doer.module);
+    } else if oflags != OFlags::default() {
+        pipeline(&jit_doer.module, oflags);
     }
 
     // pull out jitted run function and OFF we go!!
@@ -953,10 +955,10 @@ fn jit_compile_kaleido_prog<'a>(
     Ok(efn)
 }
 
-pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool) -> Result<i32> {
+pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool, oflags: OFlags) -> Result<i32> {
     let ctxt = Context::create();
     unsafe { CMD_LINE_ARGS = args };
-    let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast, opt)?;
+    let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast, opt, oflags)?;
     Ok(unsafe { func.call() })
 }
 
@@ -965,6 +967,7 @@ pub fn emit_llvm(
     output_filename: &str,
     ast: TCProg,
     opt: bool,
+    oflags: OFlags,
 ) -> Result<()> {
     let ctxt = Context::create();
     let mut jit_doer = JitDoer::init(&ctxt, input_filename, OptimizationLevel::None)?;
@@ -979,6 +982,8 @@ pub fn emit_llvm(
 
     if opt {
         optimize(&jit_doer.module);
+    } else if oflags != OFlags::default() {
+        pipeline(&jit_doer.module, oflags);
     }
 
     match jit_doer.module.print_to_file(Path::new(output_filename)) {
@@ -993,4 +998,8 @@ pub fn emit_llvm(
 // run the optimization pipeline for the given module
 fn optimize(module: &Module) {
     run_default_pipeline(module);
+}
+
+fn pipeline(module: &Module, oflags: OFlags) {
+    run_pipeline(module, oflags);
 }

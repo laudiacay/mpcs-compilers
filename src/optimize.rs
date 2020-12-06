@@ -1,37 +1,37 @@
 use inkwell::passes::{PassManager, PassManagerBuilder};
-use inkwell::module::{Linkage, Module};
+use inkwell::module::Module;
 use inkwell::OptimizationLevel;
 
 // flags indicating which optimization passes to perform
 // names of each field correspond to snake-cased names of passes from the inkwell module
 // arguments are in the order that they are performed in run_pipeline
 // note: default for bools is false, so a default OFlag turns every flag off
-#[derive(Debug, Default)]
+#[derive(Debug, Default, PartialEq)]
 pub struct OFlags {
     // function fuckery eeeuuuugh
-    argument_promotion: bool,
-    type_based_alias_analysis: bool,
-    function_inlining: bool,
+    pub argument_promotion: bool,
+    pub type_based_alias_analysis: bool,
+    pub function_inlining: bool,
 
     // control flow/dead code
-    cfg_simplification: bool,
-    aggressive_dce: bool,
-    strip_dead_prototypes: bool,
+    pub cfg_simplification: bool,
+    pub aggressive_dce: bool,
+    pub strip_dead_prototypes: bool,
 
     // loop optimizations
-    ind_var_simplify: bool,
-    loop_vectorize: bool,
+    pub ind_var_simplify: bool,
+    pub loop_vectorize: bool,
 
     // constant shit idk
-    reassociate: bool,
-    sccp: bool,
+    pub reassociate: bool,
+    pub sccp: bool,
 
     // weird asm
-    instruction_combining: bool,
-    promote_memory_to_register: bool,
+    pub instruction_combining: bool,
+    pub promote_memory_to_register: bool,
 
     // cleanup
-    dead_arg_elimination: bool,
+    pub dead_arg_elimination: bool,
 }
 
 // perform the pipeline specified by oflags on the given module
