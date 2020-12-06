@@ -4,10 +4,10 @@ def cint negbad (cint $x) {
     return $rv;
 }
 def int run () {
-    int $x = -1 * 2147483647 - 1;
-    print $x;
-    print -$x;
-    print -($x+1);
-    print negbad([cint] $x);
+    int $int_min = -1 * 2147483647 - 1;
+    print $int_min;
+    print -$int_min;
+    print -($int_min+1);
+    print negbad([cint] $int_min);
     return 0;
 }

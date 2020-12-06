@@ -1,0 +1,5 @@
+def int run() {
+    cint $x = [cint] 5;
+    $x = $x + [cint] 2147483647;
+    return 0;
+}

@@ -964,8 +964,10 @@ fn jit_compile_kaleido_prog<'a>(
 
         let pipeline_ms = sw.elapsed().as_nanos();
         if time {
-            println!("optimization completed in {}ns", pipeline_ms);
+            println!("{}", pipeline_ms);
         }
+    } else if time {
+        println!("0");
     }
 
     // pull out jitted run function and OFF we go!!
@@ -984,7 +986,7 @@ pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool, ofla
 
     let run_ms = sw.elapsed().as_nanos();
     if time {
-        println!("run() returned in {}ns", run_ms);
+        println!("{}", run_ms);
     }
 
     Ok(rc)

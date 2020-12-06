@@ -1,0 +1,9 @@
+def int foo() {
+    return 3;
+}
+
+def int run() {
+    int $x = 1;
+    $x = $x + foo();
+    return 0;
+}
