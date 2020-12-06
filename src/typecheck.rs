@@ -168,13 +168,17 @@ fn typecheck_stmt(
                 }
             } else {
                 if exp.type_ != vdecl.type_ {
-                    Err(anyhow!("variable declaration assigns to wrong type"))?
+                    Err(anyhow!(
+                        "variable declaration assigns to wrong type, exp: {:?}, vdecl: {:?}",
+                        exp,
+                        vdecl
+                    ))?
                 }
             }
 
             defined_vars.insert(vdecl.varid.clone(), vdecl.type_.clone());
             if let Some(_) = shadowed_vars.insert(vdecl.varid.clone(), vdecl.type_.clone()) {
-                Err(anyhow!("duplicate variable definition"))?;
+                Err(anyhow!("duplicate variable definition: {:?}", vdecl.varid.clone()))?;
             }
 
             TCStmt::VDeclStmt { vdecl, exp }
@@ -301,6 +305,7 @@ pub enum TCExp {
     FuncCall {
         globid: String,
         exps: Vec<TypedExp>,
+        expected_args: Vec<TCType>,
     },
 }
 
@@ -511,7 +516,7 @@ fn typecheck_exp(
         Exp::VarVal(varid) => {
             let vartype = defined_vars.get(&varid);
             match vartype {
-                None => Err(anyhow!("variable not defined"))?,
+                None => Err(anyhow!("variable not defined: {}", varid))?,
                 Some(TCType::Ref(_, atype)) => {
                     // treat ref types within expressions as though they're the actual type
                     // handle dereferencing, uh, later
@@ -568,6 +573,7 @@ fn typecheck_exp(
                     let new_exp = TCExp::FuncCall {
                         globid,
                         exps: arg_exps,
+                        expected_args: arg_types.clone(),
                     };
                     Ok(TypedExp {
                         type_,
@@ -583,6 +589,7 @@ fn typecheck_exp(
                         let new_exp = TCExp::FuncCall {
                             globid,
                             exps: arg_exps,
+                            expected_args: arg_types.clone(),
                         };
                         Ok(TypedExp {
                             type_,
@@ -591,7 +598,7 @@ fn typecheck_exp(
                     }
                 }
             } else {
-                Err(anyhow!("function not defined"))?
+                Err(anyhow!("function not defined: {}", globid))?
             }
         }
     }

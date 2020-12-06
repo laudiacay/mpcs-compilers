@@ -253,6 +253,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     }
 
     fn lift_function(&mut self, func: TCFunc) -> Result<()> {
+        //nprintln!("LIFTING FUNCITON: {:?}", func);
         let ret_type_: Option<BasicTypeEnum> = self.lift_type(func.type_.clone())?;
         let args: Vec<BasicTypeEnum> = func
             .args
@@ -290,7 +291,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 Some(_) => self.main_builder.build_unreachable(),
             };
         };
-
+        //println!("fn lifted: {:?}", fn_);
         //if fn_.verify(true) {
         //    Ok(())
         //} else {
@@ -350,6 +351,7 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     vdecl.type_,
                     vdecl.varid.clone(),
                 )?;
+                //println!("vdecl time baby: {:?}, {:?}", vdecl, exp);
 
                 if let TCType::Ref(_, _) = vdecl.type_ {
                     if let TCExp::VarVal(tar_varid) = &exp.exp {
@@ -357,6 +359,11 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                             .current_fn_stack_variables
                             .get(&tar_varid.clone())
                             .unwrap();
+                        //println!("vdecl time baby: {:?}, {:?}", vdecl, exp);
+                        //println!(
+                       //     "building varval: targettype {:?}, varid {:?}, ptr: {:?}",
+                        //    tar_type, tar_varid, tar_ptr
+                        //);
                         if let TCType::Ref(_, _) = tar_type {
                             let val = self.main_builder.build_load(*tar_ptr, "load");
                             self.main_builder.build_store(var, val);
@@ -521,28 +528,40 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
     }
 
     fn lift_exp_to_void(&self, exp: &TCExp) -> Result<Option<BasicValueEnum<'ctx>>> {
-        if let TCExp::FuncCall { globid, exps } = exp {
+        //println!("LIFT EXP TO VOID: {:?}", exp);
+        if let TCExp::FuncCall {
+            globid,
+            exps,
+            expected_args,
+        } = exp
+        {
+            // missing function caught during typechecking
             let func = self.module.get_function(globid.as_str()).unwrap();
-
             // lift args
+            //println!("func call globid: {:?}, func:{:?}", globid, func);
             let mut args = Vec::with_capacity(exps.len());
             for (i, e) in exps.iter().enumerate() {
-                let param = func
-                    .get_nth_param(i as u32)
-                    .ok_or(anyhow!("couldn't get function parameter"))?;
-                if let BasicValueEnum::PointerValue(_) = param {
+                // function expects passing by REFERENCE
+                if let TCType::Ref(_, _) = expected_args[i] {
+                    //println!("passing by ref!");
                     if let TCExp::VarVal(varid) = &e.exp {
-                        let the_variable = self
+                        let (llvm_var_thing, var_tctype) = self
                             .current_fn_stack_variables
                             .get(varid)
-                            .ok_or(anyhow!("no such variable (bug)"))?
-                            .0;
-                        args.push(BasicValueEnum::PointerValue(the_variable));
+                            .ok_or(anyhow!("no such variable (bug)"))?;
+                        match var_tctype {
+                            TCType::Ref(_, _) => {
+                                let rrref = self.main_builder.build_load(*llvm_var_thing, "load");
+                                args.push(rrref);
+                            }
+                            _ => args.push(BasicValueEnum::PointerValue(*llvm_var_thing)),
+                        }
                     } else {
                         Err(anyhow!("expected varval in reference type argument"))?;
                     }
                 } else {
-                    args.push(self.lift_exp(&e)?.unwrap());
+                    let lifted_exp = self.lift_exp(&e)?.unwrap();
+                    args.push(lifted_exp);
                 }
             }
 
@@ -552,36 +571,11 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                 .by_ref()
                 .map(|&val| val.into())
                 .collect::<Vec<BasicValueEnum>>();
-
+            //println!("about to build call");
+            //println!("args_arr: {:?}", args_arr);
             self.main_builder
                 .build_call(func, args_arr.as_slice(), "call");
-        /*
-        let func_opt = self.module.get_function(globid.as_str());
-        if let None = func_opt {
-            // should be unreachable, as this would be caught during typechecking
-            Err(anyhow!("unknown function"))?;
-        }
-        let func = func_opt.unwrap();
-
-        // lift args
-        let mut args = vec![];
-        for e in exps {
-            args.push(self.lift_exp(&e)?);
-        }
-
-        // build call using lifted args
-        // unwrap is safe here because typechecker guarantees function arguments are not void
-        let args_arr = args
-            .iter()
-            .by_ref()
-            .map(|&val| val.unwrap().into())
-            .collect::<Vec<BasicValueEnum>>();
-
-        // don't need to save the value as this is only called for void functions
-        // but do we need to check if the call itself is valid?
-        self.main_builder
-            .build_call(func, args_arr.as_slice(), "call"); // wtf is the 'name' supposed to be
-        */
+            //println!("just built call");
         } else {
             // should be unreachable
             Err(anyhow!(
@@ -806,13 +800,19 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                         UOp::SignedNeg => {
                             let checked_overflow = maybe_deref(exp.type_)? == TCAtomType::CIntType;
                             if !checked_overflow {
-                                BasicValueEnum::IntValue(self.main_builder.build_int_neg(val, "neg"))
+                                BasicValueEnum::IntValue(
+                                    self.main_builder.build_int_neg(val, "neg"),
+                                )
                             } else {
                                 let func = self.module.get_function("__ssub__").unwrap();
                                 self.main_builder
                                     .build_call(
                                         func,
-                                        vec![self.context.i32_type().const_int(0, false).into(), lifted_exp].as_slice(),
+                                        vec![
+                                            self.context.i32_type().const_int(0, false).into(),
+                                            lifted_exp,
+                                        ]
+                                        .as_slice(),
                                         "call",
                                     )
                                     .try_as_basic_value()
@@ -857,29 +857,39 @@ impl<'ast: 'ctx, 'ctx> JitDoer<'ctx> {
                     _ => Err(anyhow!("void variable spooooky ooooo!!!"))?,
                 }
             }
-            TCExp::FuncCall { globid, exps } => {
+            TCExp::FuncCall {
+                globid,
+                exps,
+                expected_args,
+            } => {
                 // missing function caught during typechecking
                 let func = self.module.get_function(globid.as_str()).unwrap();
-
                 // lift args
+                //println!("func call globid: {:?}, func:{:?}", globid, func);
                 let mut args = Vec::with_capacity(exps.len());
                 for (i, e) in exps.iter().enumerate() {
-                    let param = func
-                        .get_nth_param(i as u32)
-                        .ok_or(anyhow!("couldn't get function parameter"))?;
-                    if let BasicValueEnum::PointerValue(_) = param {
+                    // function expects passing by REFERENCE
+                    if let TCType::Ref(_, _) = expected_args[i] {
+                        //println!("passing by ref!");
                         if let TCExp::VarVal(varid) = &e.exp {
-                            let the_variable = self
+                            let (llvm_var_thing, var_tctype) = self
                                 .current_fn_stack_variables
                                 .get(varid)
-                                .ok_or(anyhow!("no such variable (bug)"))?
-                                .0;
-                            args.push(BasicValueEnum::PointerValue(the_variable));
+                                .ok_or(anyhow!("no such variable (bug)"))?;
+                            match var_tctype {
+                                TCType::Ref(_, _) => {
+                                    let rrref =
+                                        self.main_builder.build_load(*llvm_var_thing, "load");
+                                    args.push(rrref);
+                                }
+                                _ => args.push(BasicValueEnum::PointerValue(*llvm_var_thing)),
+                            }
                         } else {
                             Err(anyhow!("expected varval in reference type argument"))?;
                         }
                     } else {
-                        args.push(self.lift_exp(&e)?.unwrap());
+                        let lifted_exp = self.lift_exp(e)?.unwrap();
+                        args.push(lifted_exp);
                     }
                 }
 
@@ -936,12 +946,10 @@ fn jit_compile_kaleido_prog<'a>(
     //https://thedan64.github.io/inkwell/inkwell/enum.OptimizationLevel.html
     let mut jit_doer = JitDoer::init(ctxt, toplvl_filename, OptimizationLevel::None)?;
     for e in ast.externs {
-        // what do i do with this???
-        let _ext = jit_doer.lift_extern(e)?;
+        jit_doer.lift_extern(e)?;
     }
     for f in ast.funcs {
-        // what do i do with this???
-        let _fn = jit_doer.lift_function(f)?;
+        jit_doer.lift_function(f)?;
     }
 
     if opt {
