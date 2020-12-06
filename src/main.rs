@@ -74,7 +74,7 @@ fn main() {
             "instruction_combining"      => oflags.instruction_combining = true,
             "promote_memory_to_register" => oflags.promote_memory_to_register = true,
             "dead_arg_elimination"       => oflags.dead_arg_elimination = true,
-            _ => (),
+            _ => println!("ignoring invalid option: {}", f),
         }
     }
 
