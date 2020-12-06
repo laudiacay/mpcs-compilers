@@ -1,0 +1,5 @@
+def int run() {
+    cint $x = [cint] 5;
+    print($x / [cint] 0);
+    return 0;
+}

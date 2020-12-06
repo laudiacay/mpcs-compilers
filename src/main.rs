@@ -6,6 +6,7 @@ extern crate lalrpop_util;
 mod ast;
 mod jit;
 mod typecheck;
+mod optimize;
 use clap::{App, Arg, Values};
 use std::fs::{read_to_string, File};
 
