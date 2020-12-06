@@ -22,8 +22,8 @@ fn main() {
             Arg::from_usage("-O 'enable optimizations'"),
             Arg::from_usage("--emit-ast 'output format will contain serialized format for AST'").conflicts_with("emit-llvm"),
             Arg::from_usage("--jit 'JIT compile and run the code in input-file, any program output will go into output-file'").conflicts_with("emit-llvm").conflicts_with("emit-ast"),
+            Arg::from_usage("--time 'compiler will emit timing information for optimization passes and running time'").conflicts_with("O").conflicts_with("emit-llvm").conflicts_with("emit-ast"),
             Arg::from_usage("--emit-llvm 'produce the LLVM IR (unoptimized unless -O is provided)'"),
-            //Arg::from_usage("--argument-promotion ''").conflicts_with("O"),
             Arg::from_usage("-f [flag]... 'apply the specified optimization during compilation'").conflicts_with("O"),
             Arg::from_usage("-o <output-file> 'required output file'"),
             Arg::from_usage("<input-file> 'sets the input file to use'"),
@@ -62,7 +62,7 @@ fn main() {
     for f in matches.values_of("f").unwrap_or(Values::default()) {
         match f {
             "argument_promotion"         => oflags.argument_promotion = true,
-            "type_based_alias_analysis"  => oflags.type_based_alias_analysis = true,
+            "basic_alias_analysis"       => oflags.basic_alias_analysis = true,
             "function_inlining"          => oflags.function_inlining = true,
             "cfg_simplification"         => oflags.cfg_simplification = true,
             "aggressive_dce"             => oflags.aggressive_dce = true,
@@ -77,6 +77,8 @@ fn main() {
             _ => println!("ignoring invalid option: {}", f),
         }
     }
+
+    let time = matches.is_present("time");
 
     if matches.is_present("emit-ast") {
         if let Err(msg) = serde_yaml::to_writer(out_file, &typed_prog) {
@@ -94,7 +96,7 @@ fn main() {
         for a in matches.values_of("args").unwrap_or(Values::default()) {
             arg_strings.push(a.to_string());
         }
-        match jit::jit(input_filename, typed_prog, arg_strings, opt, oflags) {
+        match jit::jit(input_filename, typed_prog, arg_strings, opt, oflags, time) {
             Err(e) => {
                 println!("error: {}", e);
                 std::process::exit(1);

@@ -9,8 +9,8 @@ use inkwell::OptimizationLevel;
 #[derive(Debug, Default, PartialEq)]
 pub struct OFlags {
     // function fuckery eeeuuuugh
+    pub basic_alias_analysis: bool,
     pub argument_promotion: bool,
-    pub type_based_alias_analysis: bool,
     pub function_inlining: bool,
 
     // control flow/dead code
@@ -39,11 +39,11 @@ pub fn run_pipeline(module: &Module, oflags: OFlags) {
     // ??????????????
     let pm = PassManager::create(());
 
+    if oflags.basic_alias_analysis {
+        pm.add_basic_alias_analysis_pass();
+    }
     if oflags.argument_promotion {
         pm.add_argument_promotion_pass();
-    }
-    if oflags.type_based_alias_analysis {
-        pm.add_type_based_alias_analysis_pass();
     }
     if oflags.function_inlining {
         pm.add_function_inlining_pass();

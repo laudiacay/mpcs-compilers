@@ -19,6 +19,7 @@ anyhow = "1.0"
 clap = "2.33"
 #afl = "*"
 inkwell = { git = "https://github.com/TheDan64/inkwell", branch = "master", features = ["llvm7-0"] }
+stopwatch = "0.0.7"
 
 
 [[bin]]

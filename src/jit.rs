@@ -14,6 +14,7 @@ use inkwell::{AddressSpace, FloatPredicate, IntPredicate, OptimizationLevel};
 use std::collections::HashMap;
 use std::convert::TryInto;
 use std::path::Path;
+use stopwatch::Stopwatch;
 // may need pub fn set_triple(&self, triple: &TargetTriple)
 // pub fn write_bitcode_to_path(&self, path: &Path) -> bool
 //pub fn write_bitcode_to_memory(&self) -> MemoryBuffer
@@ -942,6 +943,7 @@ fn jit_compile_kaleido_prog<'a>(
     ast: TCProg,
     opt: bool,
     oflags: OFlags,
+    time: bool,
 ) -> Result<JitFunction<'a, KaleidoRunFunc>> {
     //https://thedan64.github.io/inkwell/inkwell/enum.OptimizationLevel.html
     let mut jit_doer = JitDoer::init(ctxt, toplvl_filename, OptimizationLevel::None)?;
@@ -952,22 +954,40 @@ fn jit_compile_kaleido_prog<'a>(
         jit_doer.lift_function(f)?;
     }
 
+
     if opt {
         optimize(&jit_doer.module);
     } else if oflags != OFlags::default() {
+        let sw = Stopwatch::start_new();
+
         pipeline(&jit_doer.module, oflags);
+
+        let pipeline_ms = sw.elapsed().as_nanos();
+        if time {
+            println!("optimization completed in {}ns", pipeline_ms);
+        }
     }
 
     // pull out jitted run function and OFF we go!!
     let efn = unsafe { jit_doer.execution_engine.get_function("run")? };
+
     Ok(efn)
 }
 
-pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool, oflags: OFlags) -> Result<i32> {
+pub fn jit(input_filename: &str, ast: TCProg, args: Vec<String>, opt: bool, oflags: OFlags, time: bool) -> Result<i32> {
     let ctxt = Context::create();
     unsafe { CMD_LINE_ARGS = args };
-    let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast, opt, oflags)?;
-    Ok(unsafe { func.call() })
+    let func = jit_compile_kaleido_prog(&ctxt, input_filename, ast, opt, oflags, time)?;
+    let sw = Stopwatch::start_new();
+
+    let rc = unsafe { func.call() };
+
+    let run_ms = sw.elapsed().as_nanos();
+    if time {
+        println!("run() returned in {}ns", run_ms);
+    }
+
+    Ok(rc)
 }
 
 pub fn emit_llvm(
