@@ -23,3 +23,7 @@ Specifically, the fuzzer found a crash based on code containing the following li
 The full input that caused the crash can be found at:
 
 ```out/crashes/id\:000000\,sig\:06\,src\:000000\,time\:547433\,op\:havoc\,rep\:2```
+
+# OPTIMIZATION BENCHMARKING
+
+Test cases for optimization benchmarking are in `final-optimization-benchmarks/`. To run optimization benchmarks, run `python3 run_tests.py` and find the output in `results/`. To add optimization benchmarking for another file, append a line similar to the others at the end of `run_tests.py` with the relative or absolute path of the `ek` file and re-run the benchmarks.

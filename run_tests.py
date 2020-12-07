@@ -52,6 +52,6 @@ def test_ek(ekfile, extra_args=[]):
 
 if __name__ == '__main__':
     test_ek('test/test20.ek')
-    test_ek('test/hellfile.ek',['4'])
-    test_ek('test/hellfile-function.ek',['4'])
-    test_ek('test/hellfile-cf.ek',['4'])
+    test_ek('test/bigfile.ek',['4'])
+    test_ek('test/bigfile-function.ek',['4'])
+    test_ek('test/bigfile-cf.ek',['4'])

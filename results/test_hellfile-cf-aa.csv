@@ -1,7 +1,0 @@
-optimizations,pipeline time (ns),run time (ns)
-none,0.0,95262211.0
-functions,4735717.0,93401206.0
-control,4935053.0,95135265.0
-memory,12825639.0,58021335.0
-other,17328104.0,96830178.0
-all,59087952.0,36170891.0
