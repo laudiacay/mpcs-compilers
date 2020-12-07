@@ -1,0 +1,155 @@
+
+extern int arg(int);
+extern float argf(int);
+
+def int dead_function(int $aaa) {
+    return $aaa; 
+}
+
+def int a_ton_of_spurious_local_refs(int $a) {
+    ref int $b = $a;
+    ref int $c = $b;
+    ref int $d = $c;
+    ref int $e = $d;
+    ref int $f = $e;
+    ref int $g = $f;
+    $g = $g + 1;
+    return $g;
+}
+
+def int a_ton_of_spurious_locals(int $a) {
+    int $b = $a;
+    int $c = $b;
+    int $d = $c;
+    int $e = $d;
+    int $f = $e;
+    int $g = $f;
+    $g = $g + 1;
+    return $g;
+}
+
+def int constant_propagation_stuff() {
+    int $x = 3;
+    int $y = $x + 2;
+    return $y;
+}
+
+def int constant_simplification_stuff() {
+    return 1*2*3*4*5*6*7*8*9*10;
+}
+
+def int associativity(int $a) {
+    return 1 + (2 + (3 + (4 + $a)));
+}
+
+def int should_definitely_be_inlined(int $a) {
+    return $a;
+}
+
+def void dumbass_bounds_on_loop(ref int $x) {
+    int $y = 30;
+    while ($y < 100) {
+        $x = $x + 1;
+        $y = $y + 5;
+    }
+}
+
+def void useless_loop(ref int $x) {
+    $x = $x + 1;
+    int $y = 0;
+    while ($y < 30) {
+        $y = $y + 1;
+    }
+}
+
+def void useless_biiiig_loop(ref int $x) {
+    $x = $x + 1;
+    int $y = 0;
+    while ($y < 30300000) {
+        $y = $y + 1;
+    }
+}
+
+def int dumbass_arithmetic_in_loop() {
+    int $y = 0;
+    while ($y < 30300000 && 1+2+3+4+5+6+7+8+9+10 > 1) {
+        $y = $y + 1;
+        $y = $y + 1;
+    }
+
+    while ($y > 0 && should_definitely_be_inlined(2) + 5 > 1) {
+        $y = $y - 1;
+        $y = $y - 1;
+    }
+    return $y;
+}
+
+def int cfg_and_dead_code(int $x) {
+    int $y = $x * 4;
+    if (true || dumbass_arithmetic_in_loop() == 3) {
+        $y = $y / 2;
+    }
+    while (false) {
+        $y = dumbass_arithmetic_in_loop();
+    }
+    return $y;
+}
+
+def int read_only_ref(ref int $a) {
+    return $a + 3;
+}
+
+def void add_two_refs_put_in_third(ref int $x1, ref int $x2, ref int $x3) {
+    $x3 = $x1 + $x2;
+}
+
+def int add_two(int $x1, int $x2) {
+    return $x1 + $x2;
+}
+
+def void assert_eq(int $x1, int $x2) {
+    if (!($x1 == $x2)){
+        print($x1);
+        print($x2);
+        print(66666);
+    }
+}
+
+def int run() {
+
+    # testing pass by reference versus pass by value stuff
+    #int $y1 = 1;
+    #int $y2 = 2;
+    #int $y3 = 90;
+    #add_two_refs_put_in_third($y1, $y2, $y3);
+    #assert_eq($y3, 3);
+    #$y3 = 20;
+    #ref int $x1p = $y1;
+    #ref int $x2p = $y2;
+    #ref int $x3p = $y3;
+    #add_two_refs_put_in_third($x1p, $x2p, $x3p);
+    #assert_eq($x3p, 3);
+    #assert_eq($x3p, add_two($y1, $y2));
+    #assert_eq($x3p, add_two($x1p, $x2p));
+
+
+    # horrible code in order to test optimizations!
+    int $x = arg(0);
+    ref int $xref = $x;
+    int $x0 = a_ton_of_spurious_local_refs($x);
+    int $x1 = a_ton_of_spurious_locals($x);
+    int $x1_ref = a_ton_of_spurious_locals($xref);
+    #int $x2 = constant_propagation_stuff();
+    #int $x3 = constant_simplification_stuff();
+    #int $x4 = associativity($x);
+    int $x5 = should_definitely_be_inlined($x);
+    #dumbass_bounds_on_loop($xref);
+    #dumbass_bounds_on_loop($x);
+    #useless_loop($xref);
+    #useless_biiiig_loop($xref);
+    #int $x6 = dumbass_arithmetic_in_loop();
+    #int $x7 = cfg_and_dead_code($x);
+    int $x8 = read_only_ref($xref);
+    print($x);
+    return 0;
+}
