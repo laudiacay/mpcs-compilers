@@ -35,12 +35,12 @@ def test_ek(ekfile, extra_args=[]):
     test_groups = {
         'none'      : [],
         'functions' : ['-fargument_promotion','-fbasic_alias_analysis','-ffunction_inlining'],
-        'control'   : ['-fcfg_simplification','-faggressive_dce','-fstrip_dead_prototypes'],
-        'memory'    : ['-finstruction_combining','-fpromote_memory_to_register'],
-        'other'     : ['-find_var_simplify','-floop_vectorize','-freassociate','-fsccp','-fdead_arg_elimination'],
+        'control'   : ['-fcfg_simplification','-faggressive_dce','-fstrip_dead_prototypes','-fbasic_alias_analysis'],
+        'memory'    : ['-finstruction_combining','-fpromote_memory_to_register','-fbasic_alias_analysis'],
+        'other'     : ['-find_var_simplify','-floop_vectorize','-freassociate','-fsccp','-fdead_arg_elimination','-fbasic_alias_analysis'],
     }
     test_groups['all'] = [flag for group in test_groups for flag in test_groups[group]]
-    csvfile = open('results/test_{}.csv'.format(ekbase), 'w')
+    csvfile = open('results/test_{}-aa.csv'.format(ekbase), 'w')
     writer = csv.writer(csvfile)
     writer.writerow(['optimizations','pipeline time (ns)','run time (ns)'])
     basic_args = './bin/ekcc --jit --time'.split()
