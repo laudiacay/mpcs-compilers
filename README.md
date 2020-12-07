@@ -27,3 +27,5 @@ The full input that caused the crash can be found at:
 # OPTIMIZATION BENCHMARKING
 
 Test cases for optimization benchmarking are in `final-optimization-benchmarks/`. To run optimization benchmarks, run `python3 run_tests.py` and find the output in `results/`. To add optimization benchmarking for another file, append a line similar to the others at the end of `run_tests.py` with the relative or absolute path of the `ek` file and re-run the benchmarks.
+
+A full report on the optimization benchmarking results is available in this directory as `Assignment 6 Report.docx` or `Assignment 6 Report.pdf`.
